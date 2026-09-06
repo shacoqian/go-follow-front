@@ -1,6 +1,12 @@
-import { shortAddress } from './format'
+import { fmtTime, shortAddress } from './format'
 
 it('shortens an address to 6+4', () => {
   expect(shortAddress('0x8ba1f109551bd432803012645ac136ddd64dba72')).toBe('0x8ba1…ba72')
   expect(shortAddress('0xabc')).toBe('0xabc')
+})
+
+it('formats time in local zone and dashes empty', () => {
+  expect(fmtTime(null)).toBe('—')
+  expect(fmtTime('')).toBe('—')
+  expect(fmtTime('2026-09-06T08:41:24.800Z')).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
 })

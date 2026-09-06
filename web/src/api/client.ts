@@ -11,6 +11,8 @@ export class ApiError extends Error {
 
 export const API_BASE = '/api'
 
+export const REQUEST_TIMEOUT_MS = 30_000
+
 type Method = 'GET' | 'POST' | 'PUT' | 'DELETE'
 
 let tokenSource: () => string | null = () => null
@@ -43,17 +45,34 @@ export interface Reply<T> {
 }
 
 // requestFull 保留状态码：提现接口用 200/202 区分“已确认写库”与“已广播待确认”，只看 body 分不出来。
-export async function requestFull<T>(method: Method, path: string, body?: unknown): Promise<Reply<T>> {
+export async function requestFull<T>(
+  method: Method,
+  path: string,
+  body?: unknown,
+  opts?: { timeoutMs?: number },
+): Promise<Reply<T>> {
   const headers: Record<string, string> = {}
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const token = tokenSource()
   if (token) headers.Authorization = `Bearer ${token}`
 
+  const ac = new AbortController()
+  const timer = setTimeout(() => ac.abort(), opts?.timeoutMs ?? REQUEST_TIMEOUT_MS)
+
   let res: Response
   try {
-    res = await fetch(API_BASE + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
-  } catch {
+    res = await fetch(API_BASE + path, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: ac.signal,
+    })
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') throw new ApiError(0, '请求超时')
+    if ((e as { name?: string })?.name === 'AbortError') throw new ApiError(0, '请求超时')
     throw new ApiError(0, '无法连接服务')
+  } finally {
+    clearTimeout(timer)
   }
 
   const text = await res.text()
@@ -75,6 +94,6 @@ export async function requestFull<T>(method: Method, path: string, body?: unknow
   throw new ApiError(res.status, messageFor(res.status, backendMessage), data ?? undefined)
 }
 
-export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
-  return (await requestFull<T>(method, path, body)).data
+export async function request<T>(method: Method, path: string, body?: unknown, opts?: { timeoutMs?: number }): Promise<T> {
+  return (await requestFull<T>(method, path, body, opts)).data
 }

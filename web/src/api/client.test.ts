@@ -70,6 +70,20 @@ describe('request', () => {
     expect(r.status).toBe(202)
     expect(r.data.id).toBe(1)
   })
+
+  it('aborts after the timeout and maps it to 请求超时', async () => {
+    vi.useFakeTimers()
+    fetchMock.mockImplementation((_url: string, init: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+      }),
+    )
+    const p = requestFull('GET', '/health', undefined, { timeoutMs: 1000 })
+    const assertion = expect(p).rejects.toMatchObject({ status: 0, message: '请求超时' })
+    await vi.advanceTimersByTimeAsync(1000)
+    await assertion
+    vi.useRealTimers()
+  })
 })
 
 describe('messageFor', () => {
