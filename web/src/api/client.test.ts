@@ -1,4 +1,4 @@
-import { ApiError, configureClient, messageFor, request } from './client'
+import { ApiError, configureClient, messageFor, request, requestFull } from './client'
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(body === undefined ? null : JSON.stringify(body), {
@@ -62,6 +62,13 @@ describe('request', () => {
   it('tolerates an empty body on success', async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 200 }))
     await expect(request('POST', '/auth/logout')).resolves.toBeNull()
+  })
+
+  it('requestFull keeps the status code (202 stays distinguishable)', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(202, { id: 1, note: '已广播，状态待确认' }))
+    const r = await requestFull<{ id: number }>('POST', '/wallets/1/withdraw', { asset: 'ETH', amount: '1' })
+    expect(r.status).toBe(202)
+    expect(r.data.id).toBe(1)
   })
 })
 

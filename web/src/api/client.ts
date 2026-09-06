@@ -37,7 +37,13 @@ export function messageFor(status: number, backendMessage: string): string {
   return backendMessage || `请求失败（${status}）`
 }
 
-export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
+export interface Reply<T> {
+  status: number
+  data: T
+}
+
+// requestFull 保留状态码：提现接口用 200/202 区分“已确认写库”与“已广播待确认”，只看 body 分不出来。
+export async function requestFull<T>(method: Method, path: string, body?: unknown): Promise<Reply<T>> {
   const headers: Record<string, string> = {}
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const token = tokenSource()
@@ -59,7 +65,7 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
       data = null
     }
   }
-  if (res.ok) return data as T
+  if (res.ok) return { status: res.status, data: data as T }
 
   const backendMessage =
     data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string'
@@ -67,4 +73,8 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
       : ''
   if (res.status === 401) unauthorized()
   throw new ApiError(res.status, messageFor(res.status, backendMessage), data ?? undefined)
+}
+
+export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
+  return (await requestFull<T>(method, path, body)).data
 }

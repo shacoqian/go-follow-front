@@ -36,6 +36,8 @@ npm run build      # 产物在 web/dist
 
 联调时若 gofollow 本机 `config.toml` 的 `[auth] domain="localhost"`、`uri="http://127.0.0.1:8090"` 与前端开发地址 `127.0.0.1:5173` 不一致，OKX 签名弹窗里显示的 domain 会和当前页面地址不同——这是预期的（联调阶段后端未按前端地址配置），登录本身仍能成功；正式部署时按上面「部署」一节把 `domain`/`uri` 改成前端对外地址即可。
 
+需要在提现记录里展示区块浏览器链接时，复制 `web/.env.example` 为 `web/.env` 并设置 `VITE_EXPLORER_BASE`（如 `https://explorer.example/tx/`）；不配置时界面只显示交易哈希与复制按钮。
+
 ## 构建与运行
 
 ```bash
