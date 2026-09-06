@@ -5,7 +5,7 @@ import { authApi } from '@/api/auth'
 import { toast } from '@/components/ui/toast'
 import { shortAddress } from '@/lib/format'
 import { isOkxInstalled, onAccountsChanged, personalSign, requestAccounts, waitForOkx } from '@/wallets/okx'
-import { clearSession, useSession, type Session } from './session'
+import { clearAllSessions, clearSession, forgetSession, savedSession, useSession, type Session } from './session'
 
 // 用指定地址走一遍 SIWE 登录：取消息 → personal_sign(address) → verify → 存会话。
 // 地址统一小写存会话（后端 owner 也是小写）。首次连接（loginWithOkx）和多账号切换
@@ -35,13 +35,34 @@ export async function loginWithOkx(): Promise<Session> {
 // 用户确认切换前后可能连着触发好几次事件，此时会话本来就要变，不该被当成"外部切走了"而登出。
 let switching = false
 
-// 多账号切换：对新地址重新签名登录，成功后清空查询缓存（换账号不能看到上一个账号的数据）。
-// 签名被拒或插件只认当前选中账号时 loginAs 会抛错，原样往上抛——会话和缓存都不动，
-// 调用方（AccountMenu）负责把下拉值退回原会话地址并提示用户。
+// 切到一个地址：先看本机是否还留着它上次登录成功的会话——有就直接用它、拿 /auth/me 校验一下
+// 还认不认，免得再弹一次签名；缓存没有，或者后端不认了（token 过期/被吊销/账号被锁，401/403
+// 或别的错误一并当作"不能用"），就删掉这条缓存，退回进入前的会话，照旧走一遍签名登录。
+export async function resumeOrLogin(address: string): Promise<Session> {
+  const key = address.toLowerCase()
+  const before = useSession.getState().session
+  const saved = savedSession(key)
+  if (!saved) return loginAs(address)
+  useSession.getState().setSession(saved)
+  try {
+    const me = await authApi.me()
+    useSession.getState().setRole(me.role === 'admin' ? 'admin' : 'user')
+    return useSession.getState().session as Session
+  } catch {
+    forgetSession(key)
+    useSession.getState().setSession(before)
+    return loginAs(address)
+  }
+}
+
+// 多账号切换：优先复用本机缓存的会话，缓存不可用才重新签名登录；成功后清空查询缓存
+// （换账号不能看到上一个账号的数据）。签名被拒、插件只认当前选中账号、或缓存和签名都失败时，
+// loginAs 会抛错，原样往上抛——会话和缓存都不动，调用方（AccountMenu）负责把下拉值退回原会话
+// 地址并提示用户。
 export async function switchAccount(address: string): Promise<void> {
   switching = true
   try {
-    await loginAs(address)
+    await resumeOrLogin(address)
     queryClient.clear()
   } finally {
     switching = false
@@ -51,6 +72,9 @@ export async function switchAccount(address: string): Promise<void> {
 // 登出：后端失败也要清本地会话——用户点了登出就不该还留在登录态。
 // 但 await 后端那一下的空档里，会话可能已经被别的流程（比如 switchAccount 登录成功）替换成
 // 新账号——这时不能把新会话也清掉，只清自己进来时看到的那个会话还在场的情况。
+// 清的是全部地址的缓存（clearAllSessions）而不只是当前这个——登出就该是登出，不留一个免签的
+// 后门，跟 401/403 触发的被动清会话（clearSession，只清当前，见 main.tsx 的 onUnauthorized
+// 和下面 refreshMe 的 403 分支）不是一回事。
 export async function logout(): Promise<void> {
   const before = useSession.getState().session
   try {
@@ -59,7 +83,7 @@ export async function logout(): Promise<void> {
     // ignore
   } finally {
     if (useSession.getState().session?.token === before?.token) {
-      clearSession()
+      clearAllSessions()
       // 换人登录不能看到上一个账号的数据：会话清了，缓存也得清。
       queryClient.clear()
     }

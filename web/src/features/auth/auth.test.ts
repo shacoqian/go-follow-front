@@ -18,8 +18,8 @@ import { authApi } from '@/api/auth'
 import { toast } from '@/components/ui/toast'
 import { shortAddress } from '@/lib/format'
 import * as okx from '@/wallets/okx'
-import { loginAs, loginWithOkx, logout, refreshMe, signAction, switchAccount, watchAccountChanges } from './auth'
-import { clearSession, sessionToken, useSession } from './session'
+import { loginAs, loginWithOkx, logout, refreshMe, resumeOrLogin, signAction, switchAccount, watchAccountChanges } from './auth'
+import { clearAllSessions, sessionToken, useSession } from './session'
 
 const ADDR = '0x8ba1f109551bD432803012645Ac136ddd64DBA72'
 // 用相对时间，免得测试到了某天因为会话过期突然变红。
@@ -27,7 +27,7 @@ const EXPIRES = new Date(Date.now() + 86_400_000).toISOString()
 
 beforeEach(() => {
   vi.clearAllMocks()
-  clearSession()
+  clearAllSessions()
   vi.mocked(authApi.nonce).mockResolvedValue({ message: 'siwe-message' })
   vi.mocked(authApi.verify).mockResolvedValue({ token: 'tok', address: ADDR, role: 'admin', expires_at: EXPIRES })
   vi.mocked(authApi.logout).mockResolvedValue(undefined)
@@ -221,4 +221,84 @@ it('switchAccount leaves the session untouched when signing fails', async () => 
   expect(useSession.getState().session?.address).toBe(ADDR.toLowerCase())
   expect(clear).not.toHaveBeenCalled()
   clear.mockRestore()
+})
+
+it('resumeOrLogin reuses a still-valid saved session and skips signing, but refreshes the role via /auth/me', async () => {
+  await loginWithOkx() // 登录 A，缓存 saved[A]
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  await switchAccount(ADDR_B) // 登录 B，缓存 saved[A]、saved[B]
+  vi.mocked(authApi.nonce).mockClear()
+  vi.mocked(authApi.me).mockResolvedValueOnce({ address: ADDR.toLowerCase(), role: 'admin' })
+  const s = await resumeOrLogin(ADDR)
+  expect(authApi.me).toHaveBeenCalledTimes(1)
+  expect(authApi.nonce).not.toHaveBeenCalled()
+  expect(okx.personalSign).not.toHaveBeenLastCalledWith('siwe-message', ADDR)
+  expect(s.token).toBe('tok') // 用的还是缓存里那个 token，没有重新签名换新 token
+  expect(s.role).toBe('admin') // role 以 /auth/me 的返回为准
+  expect(useSession.getState().session?.address).toBe(ADDR.toLowerCase())
+})
+
+it('resumeOrLogin forgets a saved session that the backend no longer accepts and signs in again', async () => {
+  await loginWithOkx() // 登录 A，缓存 saved[A]
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  await switchAccount(ADDR_B) // 登录 B，缓存 saved[A]、saved[B]
+  vi.mocked(authApi.me).mockRejectedValueOnce(new ApiError(401, '会话已过期'))
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-a2', address: ADDR, role: 'admin', expires_at: EXPIRES })
+  const s = await resumeOrLogin(ADDR)
+  expect(authApi.me).toHaveBeenCalledTimes(1)
+  expect(authApi.nonce).toHaveBeenLastCalledWith(ADDR)
+  expect(okx.personalSign).toHaveBeenLastCalledWith('siwe-message', ADDR)
+  expect(s.token).toBe('tok-a2')
+  expect(useSession.getState().saved[ADDR.toLowerCase()]?.token).toBe('tok-a2')
+})
+
+it('resumeOrLogin signs in directly when there is no saved session for the address', async () => {
+  await resumeOrLogin(ADDR_B)
+  expect(authApi.me).not.toHaveBeenCalled()
+  expect(authApi.nonce).toHaveBeenCalledWith(ADDR_B)
+})
+
+it('switchAccount reuses the saved session so switching back does not require a new signature', async () => {
+  await loginWithOkx()
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  await switchAccount(ADDR_B)
+  vi.mocked(authApi.nonce).mockClear()
+  vi.mocked(okx.personalSign).mockClear()
+  vi.mocked(authApi.me).mockResolvedValueOnce({ address: ADDR.toLowerCase(), role: 'admin' })
+  await switchAccount(ADDR)
+  expect(authApi.nonce).not.toHaveBeenCalled()
+  expect(okx.personalSign).not.toHaveBeenCalled()
+  expect(useSession.getState().session?.address).toBe(ADDR.toLowerCase())
+})
+
+it('logout wipes every cached session, not just the current one', async () => {
+  await loginWithOkx()
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  await switchAccount(ADDR_B)
+  expect(Object.keys(useSession.getState().saved)).toHaveLength(2)
+  await logout()
+  expect(useSession.getState().saved).toEqual({})
+})
+
+it('watchAccountChanges reuses a saved session for the new address without prompting a signature', async () => {
+  await loginWithOkx() // 会话 A，缓存 saved[A]
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  await switchAccount(ADDR_B) // 会话 B，缓存 saved[A]、saved[B]
+  let handler: (accounts: string[]) => void = () => {}
+  vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
+    handler = cb
+    return () => {}
+  })
+  watchAccountChanges()
+  vi.mocked(authApi.nonce).mockClear()
+  vi.mocked(okx.personalSign).mockClear()
+  vi.mocked(authApi.me).mockResolvedValueOnce({ address: ADDR.toLowerCase(), role: 'admin' })
+  // 插件切回 A，本机还留着 A 上次登录的会话，不该再弹一次签名。setSession(saved) 会在
+  // /auth/me 校验完成前就同步把会话地址切过去，所以这里等的是切换流程真正走完的信号
+  // （toast），而不是提前满足的会话地址。
+  handler([ADDR])
+  await vi.waitFor(() => expect(toast.success).toHaveBeenCalledWith(`已切换到 ${shortAddress(ADDR)}`))
+  expect(useSession.getState().session?.address).toBe(ADDR.toLowerCase())
+  expect(authApi.nonce).not.toHaveBeenCalled()
+  expect(okx.personalSign).not.toHaveBeenCalled()
 })

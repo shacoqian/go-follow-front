@@ -1,13 +1,13 @@
-import { clearSession, sessionToken, sessionValid, useSession, type Session } from './session'
+import { clearAllSessions, clearSession, forgetSession, savedSession, sessionToken, sessionValid, useSession, type Session } from './session'
 
-function put(expiresAt: string): Session {
-  const s: Session = { token: 'tok', address: '0xabc', role: 'user', expiresAt }
+function put(expiresAt: string, address = '0xabc'): Session {
+  const s: Session = { token: 'tok', address, role: 'user', expiresAt }
   useSession.getState().setSession(s)
   return s
 }
 
 beforeEach(() => {
-  clearSession()
+  clearAllSessions()
 })
 
 it('treats a missing session as invalid', () => {
@@ -32,4 +32,57 @@ it('treats an unparsable expiry as valid — 后端才是权威', () => {
   expect(sessionValid(s)).toBe(true)
   expect(sessionToken()).toBe('tok')
   expect(sessionValid({ ...s, expiresAt: '不是时间' })).toBe(true)
+})
+
+it('setSession remembers the address under saved (keyed by lowercase address)', () => {
+  put(new Date(Date.now() + 60_000).toISOString(), '0xabc')
+  expect(useSession.getState().saved['0xabc']?.token).toBe('tok')
+})
+
+it('setSession(null) only clears the current session, leaving saved untouched', () => {
+  put(new Date(Date.now() + 60_000).toISOString(), '0xabc')
+  clearSession()
+  expect(useSession.getState().session).toBeNull()
+  expect(useSession.getState().saved['0xabc']?.token).toBe('tok')
+})
+
+it('savedSession returns null and forgets an expired cached session', () => {
+  put(new Date(Date.now() - 1000).toISOString(), '0xabc')
+  expect(savedSession('0xABC')).toBeNull()
+  expect(useSession.getState().saved['0xabc']).toBeUndefined()
+})
+
+it('savedSession returns a still-valid cached session by lowercase lookup', () => {
+  put(new Date(Date.now() + 60_000).toISOString(), '0xabc')
+  expect(savedSession('0xabc')?.token).toBe('tok')
+})
+
+it('savedSession returns null for an address with no cache', () => {
+  expect(savedSession('0xdead')).toBeNull()
+})
+
+it('forgetSession removes just the one address', () => {
+  put(new Date(Date.now() + 60_000).toISOString(), '0xabc')
+  useSession.getState().setSession({ token: 'tok-b', address: '0xdef', role: 'user', expiresAt: new Date(Date.now() + 60_000).toISOString() })
+  forgetSession('0xABC')
+  expect(useSession.getState().saved['0xabc']).toBeUndefined()
+  expect(useSession.getState().saved['0xdef']?.token).toBe('tok-b')
+})
+
+it('clearAllSessions wipes the current session and every cached one', () => {
+  put(new Date(Date.now() + 60_000).toISOString(), '0xabc')
+  clearAllSessions()
+  expect(useSession.getState().session).toBeNull()
+  expect(useSession.getState().saved).toEqual({})
+})
+
+it('loads old persisted data that has no saved field without throwing', async () => {
+  localStorage.setItem(
+    'gofollow.session',
+    JSON.stringify({ state: { session: { token: 'old', address: '0xabc', role: 'user', expiresAt: '' } }, version: 0 }),
+  )
+  await useSession.persist.rehydrate()
+  expect(useSession.getState().session?.token).toBe('old')
+  expect(useSession.getState().saved).toEqual({})
+  expect(savedSession('0xabc')).toBeNull()
 })
