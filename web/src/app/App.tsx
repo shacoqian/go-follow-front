@@ -4,7 +4,7 @@ import LoginPage from '@/features/auth/LoginPage'
 import WalletsPage from '@/features/wallets/WalletsPage'
 import TargetsPage from '@/features/targets/TargetsPage'
 import TasksPage from '@/features/tasks/TasksPage'
-import TaskWizardPage from '@/features/tasks/TaskWizardPage'
+import TaskFormPage from '@/features/tasks/TaskFormPage'
 import TaskEditPage from '@/features/tasks/TaskEditPage'
 import { Toaster } from '@/components/ui/toast'
 import Placeholder from './Placeholder'
@@ -23,7 +23,7 @@ export function AppRoutes() {
           <Route path="/wallets" element={<WalletsPage />} />
           <Route path="/targets" element={<TargetsPage />} />
           <Route path="/tasks" element={<TasksPage />} />
-          <Route path="/tasks/new" element={<TaskWizardPage />} />
+          <Route path="/tasks/new" element={<TaskFormPage />} />
           <Route path="/tasks/:id/edit" element={<TaskEditPage />} />
           <Route path="/positions" element={<Placeholder title="仓位" />} />
           <Route path="/decisions" element={<Placeholder title="决策" />} />

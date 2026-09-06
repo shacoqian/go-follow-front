@@ -18,7 +18,7 @@ export function TargetDialog({
   open: boolean
   onOpenChange(o: boolean): void
   target?: Target
-  onSaved(): void
+  onSaved(result?: { id: number; address: string }): void
 }) {
   const [address, setAddress] = useState('')
   const [label, setLabel] = useState(target?.label ?? '')
@@ -28,8 +28,9 @@ export function TargetDialog({
   // 走全局 mutationCache：失败自动 toast（如重复地址 409），这里不重复弹。
   const create = useMutation({
     mutationFn: (body: { address: string; label: string; note: string }) => targetsApi.create(body),
-    onSuccess: () => {
-      onSaved()
+    // 创建把结果带给调用方（建单页要自动选中新目标）；编辑没有新 id，不传。
+    onSuccess: (r) => {
+      onSaved(r)
       toast.success('已保存')
       onOpenChange(false)
     },

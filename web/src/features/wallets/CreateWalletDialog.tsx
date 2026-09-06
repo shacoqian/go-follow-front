@@ -15,7 +15,7 @@ export function CreateWalletDialog({
 }: {
   open: boolean
   onOpenChange(o: boolean): void
-  onCreated(): void
+  onCreated(result: { id: number; address: string }): void
 }) {
   const [label, setLabel] = useState('')
   const [note, setNote] = useState('')
@@ -23,9 +23,9 @@ export function CreateWalletDialog({
   const m = useMutation({
     // 包一层调用：react-query 会给 mutationFn 传第二个 context 参数，直接透传会污染 walletsApi.create 收到的实参。
     mutationFn: (body: { label: string; note: string }) => walletsApi.create(body),
-    onSuccess: () => {
-      // 先失效列表，再切到结果视图——保证列表数据和用户看到的地址一致。
-      onCreated()
+    onSuccess: (r) => {
+      // 先失效列表，再切到结果视图——保证列表数据和用户看到的地址一致；带上结果，调用方可以自动选中。
+      onCreated(r)
     },
   })
 

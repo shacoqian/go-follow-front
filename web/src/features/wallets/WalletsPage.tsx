@@ -62,7 +62,7 @@ export default function WalletsPage() {
       </div>
 
       {dialog?.kind === 'create' && (
-        <CreateWalletDialog open onOpenChange={(o) => !o && setDialog(null)} onCreated={invalidate} />
+        <CreateWalletDialog open onOpenChange={(o) => !o && setDialog(null)} onCreated={() => invalidate()} />
       )}
       {dialog?.kind === 'edit' && (
         <EditWalletDialog open wallet={dialog.wallet} onOpenChange={(o) => !o && setDialog(null)} onSaved={invalidate} />

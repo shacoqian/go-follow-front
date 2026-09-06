@@ -67,3 +67,29 @@ it('shows a loading state instead of 任务不存在 while the query is pending'
   expect(screen.getByText('加载中…')).toBeInTheDocument()
   expect(screen.queryByText('任务不存在')).not.toBeInTheDocument()
 })
+
+it('shows read-only basics for the task target and wallet', async () => {
+  vi.mocked(targetsApi.list).mockResolvedValue([
+    { id: 2, address: '0x2222222222222222222222222222222222222222', label: '大户A', note: '', created_at: '' },
+  ])
+  vi.mocked(walletsApi.list).mockResolvedValue([
+    {
+      id: 1,
+      address: '0x1111111111111111111111111111111111111111',
+      label: '主钱包',
+      status: 'active',
+      usdg_balance: '5000000',
+      eth_balance: '2000000000000000',
+      task_count: 0,
+      has_pending_withdrawal: false,
+      note: '',
+      created_at: '',
+    },
+  ])
+  vi.mocked(tasksApi.list).mockResolvedValue([task])
+  renderAt('/tasks/10/edit')
+  expect(await screen.findByText(/大户A/)).toBeInTheDocument()
+  expect(screen.getByText(/主钱包/)).toBeInTheDocument()
+  expect(screen.getByText('余额 5 USDG / 0.002 ETH')).toBeInTheDocument()
+  expect(screen.queryByLabelText('目标地址')).not.toBeInTheDocument()
+})
