@@ -19,7 +19,7 @@ import { authApi } from '@/api/auth'
 import { toast } from '@/components/ui/toast'
 import { shortAddress } from '@/lib/format'
 import * as okx from '@/wallets/okx'
-import { loginAs, loginWithOkx, logout, onUnauthorized, refreshMe, resumeOrLogin, signAction, switchAccount, watchAccountChanges } from './auth'
+import { loginAs, loginWithOkx, logout, onUnauthorized, refreshMe, resumeOrLogin, runSwitchChain, signAction, switchAccount, watchAccountChanges } from './auth'
 import { clearAllSessions, sessionToken, useSession } from './session'
 
 const ADDR = '0x8ba1f109551bD432803012645Ac136ddd64DBA72'
@@ -419,4 +419,60 @@ it('does not act on a latched event until the failed switch has already logged o
   expect(authApi.nonce).not.toHaveBeenCalledWith(getAddress(ADDR_C))
   expect(useSession.getState().session).toBeNull()
   expect(useSession.getState().saved).toEqual({})
+})
+
+it('drains a latched event after a manual switch (runSwitchChain, the AccountMenu entry point) settles', async () => {
+  await loginWithOkx() // 会话 A
+  vi.mocked(authApi.nonce).mockClear()
+  const ADDR_C = '0xabcdef1234567890abcdef1234567890abcdef12'
+  let handler: (accounts: string[]) => void = () => {}
+  vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
+    handler = cb
+    return () => {}
+  })
+  watchAccountChanges()
+  let resolveVerify: (v: VerifyResponse) => void = () => {}
+  vi.mocked(authApi.verify).mockReturnValueOnce(new Promise((resolve) => { resolveVerify = resolve }))
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-c', address: ADDR_C, role: 'user', expires_at: EXPIRES })
+  // 模拟 AccountMenu：手动切到 B，走的是 runSwitchChain，不是裸的 switchAccount。
+  const manual = runSwitchChain(ADDR_B)
+  // 手动切换进行中，插件又冒出了 C——chainBusy 覆盖的是"整条链路"，手动切换发起的这条也算在内，
+  // 这次事件应该被锁存，不能立刻派发（立刻派发会撞上"切换进行中"直接被拒，进而误触发登出）。
+  handler([ADDR_C])
+  expect(sessionToken()).toBe('tok')
+  expect(authApi.nonce).toHaveBeenCalledTimes(1) // 只有 B 那一次，C 还没轮到
+  resolveVerify({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  await manual
+  // 手动切换整条链路（含它自己的 onSuccess，这里没传等于空操作）落定、chainBusy 清掉之后，
+  // 才补跑锁存的 [C]：会话现在是 B，C 不在列表里，自动对 C 重新签名登录——顺序是先 B 后 C。
+  await vi.waitFor(() => expect(authApi.nonce).toHaveBeenCalledTimes(2))
+  expect(authApi.nonce).toHaveBeenNthCalledWith(1, ADDR_B)
+  expect(authApi.nonce).toHaveBeenNthCalledWith(2, getAddress(ADDR_C))
+})
+
+it('latches (rather than immediately dispatching) an event that arrives during the failure path\'s logout() await', async () => {
+  await loginWithOkx() // 会话 A
+  vi.mocked(authApi.nonce).mockClear()
+  const ADDR_C = '0xabcdef1234567890abcdef1234567890abcdef12'
+  let handler: (accounts: string[]) => void = () => {}
+  vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
+    handler = cb
+    return () => {}
+  })
+  watchAccountChanges()
+  vi.mocked(okx.personalSign).mockRejectedValueOnce(new Error('用户拒绝签名')) // 切到 B 的签名会失败
+  let resolveLogout: () => void = () => {}
+  vi.mocked(authApi.logout).mockReturnValueOnce(new Promise((resolve) => { resolveLogout = () => resolve(undefined) }))
+  handler([ADDR_B]) // 触发切到 B，随后签名失败，失败处理里的 logout() 会卡在 await authApi.logout()
+  await vi.waitFor(() => expect(authApi.logout).toHaveBeenCalledTimes(1))
+  // 这时 switchAccount 内部早就结束了（inFlight 已经是 null），但 chainBusy 还没清——logout()
+  // 还没 await 完。这个事件应该被锁存，不能因为 inFlight 已经是 null 就被当成"没人管"直接派发。
+  handler([ADDR_C])
+  expect(authApi.nonce).not.toHaveBeenCalledWith(getAddress(ADDR_C))
+  expect(useSession.getState().session?.address).toBe(ADDR.toLowerCase()) // logout() 还没落地，会话原样没动
+  resolveLogout()
+  await vi.waitFor(() => expect(sessionToken()).toBeNull())
+  // logout() 落地、chainBusy 清掉之后才补跑锁存的 C；这时会话已经是空的，补跑直接空转。
+  expect(authApi.nonce).not.toHaveBeenCalledWith(getAddress(ADDR_C))
+  expect(useSession.getState().session).toBeNull()
 })

@@ -5,7 +5,7 @@ import { Select } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
 import { ApiError } from '@/api/client'
 import { shortAddress } from '@/lib/format'
-import { switchAccount } from '@/features/auth/auth'
+import { runSwitchChain } from '@/features/auth/auth'
 import { useSession } from '@/features/auth/session'
 import { useOkxAccounts } from '@/features/auth/useOkxAccounts'
 import { requestPermissions, supportsRequestPermissions } from '@/wallets/okx'
@@ -36,23 +36,29 @@ export default function AccountMenu() {
 
   const mutation = useMutation({
     // 选项值是小写地址（方便跟会话地址比较），真正签名登录要用 checksum 形式，和其它签名调用保持一致。
-    mutationFn: (address: string) => switchAccount(getAddress(address)),
+    // runSwitchChain 是手动切换（这里）和插件自动切换（watchAccountChanges）共用的唯一入口——
+    // 这样"切换进行中收到新的 accountsChanged 事件"这类锁存/补跑逻辑两边都能用上，不会因为是
+    // 手动点出来的就漏掉。成功/失败要做什么（toast、下拉退回原地址）通过 handlers 传进去；
+    // runSwitchChain 自己不会往上抛错，所以这里不需要再挂 useMutation 的 onSuccess/onError。
+    mutationFn: (address: string) =>
+      runSwitchChain(getAddress(address), {
+        onSuccess: () => toast.success('已切换账号'),
+        onError: (err) => {
+          // 后端明确拒绝（账号被锁定、限流等）展示后端原话；已经有一个切换在跑（比如手快点了
+          // 两下，或者插件自动切换和手动切换撞车）展示那句提示；签名被拒/插件只认当前账号这类
+          // 钱包侧失败没有具体后端消息，用设计稿里给的固定文案。
+          const inFlightMessage = '切换进行中，请稍候'
+          const message =
+            err instanceof ApiError
+              ? err.message
+              : err instanceof Error && err.message === inFlightMessage
+                ? err.message
+                : '请在 OKX 里切到该账号后重试'
+          toast.error(message)
+          setValue(session?.address ?? '')
+        },
+      }),
     meta: { silent: true },
-    onSuccess: () => toast.success('已切换账号'),
-    onError: (err) => {
-      // 后端明确拒绝（账号被锁定、限流等）展示后端原话；已经有一个切换在跑（比如手快点了两下，
-      // 或者插件自动切换和手动切换撞车）展示那句提示；签名被拒/插件只认当前账号这类钱包侧失败
-      // 没有具体后端消息，用设计稿里给的固定文案。
-      const inFlightMessage = '切换进行中，请稍候'
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : err instanceof Error && err.message === inFlightMessage
-            ? err.message
-            : '请在 OKX 里切到该账号后重试'
-      toast.error(message)
-      setValue(session?.address ?? '')
-    },
   })
 
   if (!session) return null

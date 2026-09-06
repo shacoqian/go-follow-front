@@ -58,22 +58,28 @@ export async function resumeOrLogin(address: string): Promise<Session> {
 }
 
 // switchAccount 同一时间只跑一个：并发调用（比如下拉手快点了两下，或者手动切换和插件自动切换
-// 撞在一起）直接拒绝第二个，不排队也不互相打断，调用方自己决定要不要重试。
-// watchAccountChanges 收到的 accountsChanged 事件在这期间也先别处理——插件在用户确认切换前后
-// 可能连着触发好几次事件，此时会话本来就要变，不该被当成"外部切走了"而登出；未处理完的最新一次
-// 事件会被记下来（见下面 pendingAccounts），等这次切换结束后再补一次，不会被平白丢掉。
+// 撞在一起）直接拒绝第二个，不排队也不互相打断，调用方自己决定要不要重试。这是 switchAccount
+// 自己的互斥锁，只覆盖它自己那段——不包括调用方紧跟着做的成功/失败收尾（见下面 chainBusy）。
 let inFlight: Promise<void> | null = null
 
-// switchAccount 进行中收到的 accountsChanged 事件锁存在这里——只留最新一次，切换结束后补跑。
-// 挂在 switchAccount 自己身上（而不是发起它的那次 handleAccountsChanged 调用）：不管这次切换
-// 是插件自动触发的、还是 AccountMenu 手动点出来的，只要有事件在它跑的时候被锁存，跑完都要补上，
+// chainBusy 覆盖的是"一整条切换链路"：switchAccount 本身 + 紧跟着的成功/失败收尾（失败那支还
+// 要等 logout() 落地）。watchAccountChanges 拿它（而不是 inFlight）来判断要不要锁存新事件：
+// 只看 inFlight 的话，链路走到失败分支、switchAccount 内部已经结束但 logout() 还没 await
+// 完的这段空档里 inFlight 已经是 null 了，这时候来的事件会被当成"没人管"直接派发，跟还没跑完
+// 的 logout() 撞出竞态（该清的会话被提前顶替，或者两边谁清掉谁说不准）。chainBusy 从
+// runSwitchChain 一开始就置上、到它整个 await 完（含失败分支的 logout）才清掉，覆盖了这段空档。
+let chainBusy: Promise<void> | null = null
+
+// chainBusy 期间收到的 accountsChanged 事件锁存在这里——只留最新一次，链路结束后补跑。
+// runSwitchChain 是 AccountMenu 手动切换和 watchAccountChanges 自动切换共用的唯一入口，
+// 所以不管这次切换是插件自动触发的还是手动点出来的，跑完都会经过同一处收尾逻辑补上，
 // 不会因为发起方不同就漏掉。
 let pendingAccounts: string[] | null = null
 
 // 多账号切换：优先复用本机缓存的会话，缓存不可用才重新签名登录；成功后清空查询缓存
 // （换账号不能看到上一个账号的数据）。签名被拒、插件只认当前选中账号、或缓存和签名都失败时，
-// resumeOrLogin/loginAs 会抛错，原样往上抛——会话和缓存都不动，调用方（AccountMenu）负责把
-// 下拉值退回原会话地址并提示用户。
+// resumeOrLogin/loginAs 会抛错，原样往上抛——会话和缓存都不动，调用方（runSwitchChain）负责
+// 收尾。
 export async function switchAccount(address: string): Promise<void> {
   if (inFlight) throw new Error('切换进行中，请稍候')
   const run = (async () => {
@@ -85,6 +91,38 @@ export async function switchAccount(address: string): Promise<void> {
     await run
   } finally {
     inFlight = null
+  }
+}
+
+// 切换账号的唯一入口：AccountMenu 手动切换、watchAccountChanges 自动切换都走这里，两边共用
+// chainBusy／锁存补跑这套机制。成功/失败各自要做什么（toast、要不要 logout）由调用方通过
+// onSuccess/onError 传进来；这个函数本身不管失败往上抛——两边都已经在 callback 里把该做的
+// 做完了，没必要再抛一次给调用方兜底。
+export async function runSwitchChain(
+  address: string,
+  handlers: { onSuccess?: () => void | Promise<void>; onError?: (err: unknown) => void | Promise<void> } = {},
+): Promise<void> {
+  const chain = (async () => {
+    try {
+      await switchAccount(address)
+      await handlers.onSuccess?.()
+    } catch (err) {
+      await handlers.onError?.(err)
+    }
+  })()
+  chainBusy = chain
+  try {
+    await chain
+  } finally {
+    chainBusy = null
+    // 整条链路（含失败分支里的 logout）都落定、chainBusy 也清掉之后才补跑，不然"先补跑 C、
+    // C 刚登进去，随后才轮到的失败处理里的 logout() 又把 C 的会话一起清掉"这种错误顺序就会
+    // 发生。
+    if (pendingAccounts) {
+      const latched = pendingAccounts
+      pendingAccounts = null
+      handleAccountsChanged(latched)
+    }
   }
 }
 
@@ -156,32 +194,23 @@ function handleAccountsChanged(accounts: string[]): void {
     return
   }
   const next = getAddress(accounts[0])
-  void switchAccount(next)
-    .then(() => {
-      toast.success(`已切换到 ${shortAddress(next)}`)
-    })
-    .catch(() => {
-      // 失败要先登出（回登录页），失败提示和"回登录页"是一件事，不能被后面补跑的切换打断。
+  void runSwitchChain(next, {
+    onSuccess: () => toast.success(`已切换到 ${shortAddress(next)}`),
+    onError: () => {
+      // 失败要先登出（回登录页），失败提示和"回登录页"是一件事——logout() 落地之前 chainBusy
+      // 都还没清，锁存的事件不会在这中间插队。
       toast.error('切换账号失败，请重新登录')
       return logout()
-    })
-    .then(() => {
-      // 这次切换——不管成功、还是失败后先 logout() 收尾——彻底跑完了，再看看跑的时候有没有
-      // 锁存下来的新事件，有就补一次。故意放在 switchAccount 自己的 finally 之外、等这整条
-      // 链路（含失败时的 logout）都落定之后才做：不然失败分支里"先补跑 C、C 刚登进去，随后
-      // 才轮到的 logout() 又把 C 的会话一起清掉"这种错误顺序就会发生。
-      if (pendingAccounts) {
-        const latched = pendingAccounts
-        pendingAccounts = null
-        handleAccountsChanged(latched)
-      }
-    })
+    },
+  })
 }
 
 export function watchAccountChanges(): () => void {
   if (!isOkxInstalled()) return () => {}
   return onAccountsChanged((accounts) => {
-    if (inFlight) {
+    // 用 chainBusy 而不是 inFlight：chainBusy 覆盖到成功/失败收尾（含失败分支的 logout），
+    // inFlight 在 switchAccount 内部一结束就清了，中间那段空档会被撞出竞态，见上面的注释。
+    if (chainBusy) {
       pendingAccounts = accounts
       return
     }
