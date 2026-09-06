@@ -9,6 +9,8 @@ import TaskEditPage from '@/features/tasks/TaskEditPage'
 import PositionsPage from '@/features/positions/PositionsPage'
 import DecisionsPage from '@/features/positions/DecisionsPage'
 import SignalsPage from '@/features/positions/SignalsPage'
+import OverviewPage from '@/features/admin/OverviewPage'
+import UsersPage from '@/features/admin/UsersPage'
 import { Toaster } from '@/components/ui/toast'
 import Placeholder from './Placeholder'
 import RequireAdmin from './RequireAdmin'
@@ -32,8 +34,8 @@ export function AppRoutes() {
           <Route path="/decisions" element={<DecisionsPage />} />
           <Route path="/signals" element={<SignalsPage />} />
           <Route element={<RequireAdmin />}>
-            <Route path="/admin/overview" element={<Placeholder title="总览" />} />
-            <Route path="/admin/users" element={<Placeholder title="用户" />} />
+            <Route path="/admin/overview" element={<OverviewPage />} />
+            <Route path="/admin/users" element={<UsersPage />} />
             <Route path="/admin/data" element={<Placeholder title="全站数据" />} />
             <Route path="/admin/audit" element={<Placeholder title="审计" />} />
           </Route>

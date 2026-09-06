@@ -12,6 +12,9 @@ vi.mock('@/api/tasks', () => ({ tasksApi: { list: vi.fn() } }))
 vi.mock('@/api/positions', () => ({ positionsApi: { byTask: vi.fn(), sell: vi.fn() } }))
 vi.mock('@/api/decisions', () => ({ decisionsApi: { list: vi.fn() } }))
 vi.mock('@/api/signals', () => ({ signalsApi: { list: vi.fn() } }))
+vi.mock('@/api/admin', () => ({
+  adminApi: { overview: vi.fn(), users: vi.fn(), setSetting: vi.fn(), lockUser: vi.fn(), unlockUser: vi.fn() },
+}))
 vi.mock('@/wallets/okx', () => ({
   waitForOkx: vi.fn(async () => true),
   isOkxInstalled: vi.fn(() => true),
@@ -30,6 +33,7 @@ import { targetsApi } from '@/api/targets'
 import { tasksApi } from '@/api/tasks'
 import { decisionsApi } from '@/api/decisions'
 import { signalsApi } from '@/api/signals'
+import { adminApi } from '@/api/admin'
 import { refreshMe, watchAccountChanges } from '@/features/auth/auth'
 import { waitForOkx } from '@/wallets/okx'
 import { useSession } from '@/features/auth/session'
@@ -58,6 +62,7 @@ beforeEach(() => {
   vi.mocked(tasksApi.list).mockResolvedValue([])
   vi.mocked(decisionsApi.list).mockResolvedValue([])
   vi.mocked(signalsApi.list).mockResolvedValue([])
+  vi.mocked(adminApi.users).mockResolvedValue([])
 })
 
 it('redirects an anonymous visitor to the login page', () => {
