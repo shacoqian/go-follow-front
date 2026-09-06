@@ -215,3 +215,12 @@ zod schema 一处定义，同时导出表单类型与提交换算。界面单位
 - 端到端冒烟脚本（`scripts/smoke.mjs`）不删除脚本自建的钱包（删除钱包需要动作签名，脚本不做）。
 - 数字型百分比字段（`take_profit_pct`、`take_profit_sell_pct`、`stop_loss_pct`、`max_creator_tax_pct`、`max_chase_pct`、`slippage_pct`）限制最多 2 位小数，超出时提示“最多 2 位小数”。
 - 管理员提现标签显示“交易 ID”（后端 `/admin/withdrawals` 不返回 `tx_hash`），后端补 `tx_hash` 后再改为哈希链接。
+
+## 修订（2026-09-06，多账号切换）：§3 登录与会话、§5 应用壳
+
+- 账号来源：`eth_accounts`（不弹窗）返回的已授权地址列表；`accountsChanged` 时刷新。`requestAccounts` 仍用于首次连接。
+- 登录页：显示“账号”下拉（默认插件当前选中地址），按钮“以此账号登录”，对选中地址走 SIWE。若插件尚未授权本站，下拉为空，按钮退回“连接 OKX 并登录”。
+- 顶部：登录地址改为下拉，列出全部已授权地址，当前会话地址打勾；选另一个地址 → 对该地址签名登录 → 成功则替换会话、`queryClient.clear()`、跳回当前页；失败则 toast `请在 OKX 里切到该账号后重试`，会话不变。
+- 切换保护不变：插件里切到与会话不同的地址仍登出，但登录页预选该地址。
+- 下拉末项“管理授权账号…”：`wallet_requestPermissions({eth_accounts:{}})`；方法不存在或报 4200/-32601 时不显示该项。
+- 测试：登录页多地址下拉与预选；顶部切换成功/失败两条路径；`accountsChanged` 刷新列表。
