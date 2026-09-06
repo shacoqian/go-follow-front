@@ -23,13 +23,16 @@ export function ConfirmDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(o) => {
+        if (!o && busy) return
+        onOpenChange(o)
+      }}
       title={title}
       description={description}
       hideClose
       footer={
         <>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
             取消
           </Button>
           <Button variant={destructive ? 'destructive' : 'default'} disabled={busy} onClick={onConfirm}>
@@ -38,7 +41,7 @@ export function ConfirmDialog({
         </>
       }
     >
-      <p className="text-sm text-slate-600">{description}</p>
+      {null}
     </Dialog>
   )
 }

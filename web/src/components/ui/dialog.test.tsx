@@ -20,3 +20,12 @@ it('renders nothing when closed', () => {
   render(<Dialog open={false} title="标题" onOpenChange={() => {}}><p>内容</p></Dialog>)
   expect(screen.queryByText('内容')).not.toBeInTheDocument()
 })
+
+it('falls back to an sr-only description matching the title when none is given', () => {
+  render(
+    <Dialog open title="标题" onOpenChange={() => {}}>
+      <p>内容</p>
+    </Dialog>,
+  )
+  expect(screen.getByRole('dialog')).toHaveAccessibleDescription('标题')
+})
