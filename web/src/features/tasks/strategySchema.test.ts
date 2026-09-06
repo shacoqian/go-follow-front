@@ -98,3 +98,9 @@ it('parses the blacklist textarea (trim, lowercase, skip blanks)', () => {
   const b = toBackend({ ...defaultStrategy, token_blacklist: ' 0xABC \n\n0xdef\n' }, ids)
   expect(b.token_blacklist).toEqual(['0xabc', '0xdef'])
 })
+
+it('numeric percent fields allow at most two decimals', () => {
+  expect(strategySchema.safeParse({ ...defaultStrategy, slippage_pct: 1.005 }).error?.issues[0].message).toBe('最多 2 位小数')
+  expect(strategySchema.safeParse({ ...defaultStrategy, slippage_pct: 1.05 }).success).toBe(true)
+  expect(strategySchema.safeParse({ ...defaultStrategy, tp_enabled: true, take_profit_pct: 0.001 }).error?.issues[0].message).toBe('最多 2 位小数')
+})

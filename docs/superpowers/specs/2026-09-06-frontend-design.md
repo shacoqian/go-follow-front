@@ -204,3 +204,14 @@ zod schema 一处定义，同时导出表单类型与提交换算。界面单位
 - 固定模式下编辑回读：无论后端存的 `max_per_trade_usdg` 是什么值，界面一律不展示、也不使用该值，而是回填一个可用的默认上限（避免用户切回按比例模式时立刻被“必须大于 0”卡住）；提交固定模式时该字段恒为 `"0"`。
 - 后端 `max_per_trade_usdg = 0` 表示无上限（迁移前的 API 不允许为 0，实际不会出现）；界面在按比例模式下仍要求填写上限。
 - 任务列表摘要（`TaskRow.summaryText`）改为复用 `strategySchema` 导出的 `ratioSummary(t)`/`targetFilterSummary(t)`：固定 `固定 10 USDG`；按比例 `比例 10%（5–50 USDG）`（无下限时 `比例 10%（≤50 USDG）`）；目标过滤追加 ` · 目标 ≥1 USDG` / ` · 目标 ≤100 USDG` / ` · 目标 1–100 USDG`；再接 ` · <卖出模式文案>`，止盈止损任一项开启时追加 ` · 止盈止损`。
+
+## 实现修订（2026-09-06，计划 C）
+
+- 请求统一 30 s 超时（`web/src/api/client.ts` 的 `REQUEST_TIMEOUT_MS`），超时映射为 `ApiError(0, '请求超时')`。
+- 新增 `VITE_EXPLORER_ADDRESS_BASE` 编译期变量，用于把地址渲染成区块浏览器链接（`web/src/lib/explorer.ts` 的 `addressUrl`）；未配置时仅显示地址与复制按钮。
+- 仓位页支持 `?task=` 查询参数预选任务。
+- 决策/信号列表的“加载更多”用 `limit` 参数递增实现（后端未提供游标分页）。
+- 管理员全站数据页的标签与 `owner` 过滤走 URL 查询参数，可直接分享/刷新保留状态。
+- 端到端冒烟脚本（`scripts/smoke.mjs`）不删除脚本自建的钱包（删除钱包需要动作签名，脚本不做）。
+- 数字型百分比字段（`take_profit_pct`、`take_profit_sell_pct`、`stop_loss_pct`、`max_creator_tax_pct`、`max_chase_pct`、`slippage_pct`）限制最多 2 位小数，超出时提示“最多 2 位小数”。
+- 管理员提现标签显示“交易 ID”（后端 `/admin/withdrawals` 不返回 `tx_hash`），后端补 `tx_hash` 后再改为哈希链接。

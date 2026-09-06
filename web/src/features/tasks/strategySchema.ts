@@ -39,6 +39,11 @@ function zeroToEmpty(units: string): string {
 
 const MAX_INT64 = 9223372036854775807n
 
+// 百分比字段最多保留 2 位小数（对应后端 1 bps = 0.01% 的精度）。
+function hasMoreThanTwoDecimals(p: number): boolean {
+  return Math.abs(p * 100 - Math.round(p * 100)) > 1e-9
+}
+
 function parseBlacklist(s: string): string[] {
   return s
     .split('\n')
@@ -154,6 +159,15 @@ export const strategySchema = z
     parseBlacklist(v.token_blacklist).forEach((a, i) => {
       if (!isAddress(a)) ctx.addIssue({ code: 'custom', path: ['token_blacklist'], message: `黑名单第 ${i + 1} 行不是合法地址` })
     })
+
+    if (v.tp_enabled) {
+      if (hasMoreThanTwoDecimals(v.take_profit_pct)) ctx.addIssue({ code: 'custom', path: ['take_profit_pct'], message: '最多 2 位小数' })
+      if (hasMoreThanTwoDecimals(v.take_profit_sell_pct)) ctx.addIssue({ code: 'custom', path: ['take_profit_sell_pct'], message: '最多 2 位小数' })
+      if (hasMoreThanTwoDecimals(v.stop_loss_pct)) ctx.addIssue({ code: 'custom', path: ['stop_loss_pct'], message: '最多 2 位小数' })
+    }
+    if (hasMoreThanTwoDecimals(v.max_creator_tax_pct)) ctx.addIssue({ code: 'custom', path: ['max_creator_tax_pct'], message: '最多 2 位小数' })
+    if (hasMoreThanTwoDecimals(v.max_chase_pct)) ctx.addIssue({ code: 'custom', path: ['max_chase_pct'], message: '最多 2 位小数' })
+    if (hasMoreThanTwoDecimals(v.slippage_pct)) ctx.addIssue({ code: 'custom', path: ['slippage_pct'], message: '最多 2 位小数' })
   })
 
 export type StrategyValues = z.infer<typeof strategySchema>

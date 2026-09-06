@@ -40,6 +40,8 @@ npm run build      # 产物在 web/dist
 
 `VITE_EXPLORER_BASE` 是 Vite 的编译期变量，值在构建时就被写进产物：`web/.env` 不只要在 `npm run dev` 前准备好，`./app.sh build` 前也必须存在，否则打出来的包里没有浏览器链接（改完要重新构建才生效）。
 
+类似地，需要把钱包地址、目标地址等渲染成区块浏览器链接时，设置 `VITE_EXPLORER_ADDRESS_BASE`（如 `https://explorer.example/address/`）；同样是编译期变量，规则与 `VITE_EXPLORER_BASE` 一致，不配置时界面只显示地址与复制按钮。
+
 ## 跟单任务
 
 新建/编辑跟单任务在同一页完成，买入规模有两种模式：
@@ -65,3 +67,29 @@ cp .env.example .env   # 按需改 LISTEN / GOFOLLOW_URL
 不打包时（开发）也可以直接跑 Go 服务从磁盘读产物：`cd web && npm run build && cd .. && go run ./cmd/gofollow-front`（`WEB_DIST` 可改目录）。
 
 测试：`make test`。
+
+## 端到端冒烟
+
+`scripts/smoke.mjs` 对着一个真实运行中的 gofollow（可经前端反代，也可直连）跑一遍完整流程：SIWE 登录 → 建钱包 → 建目标 → 建任务 → 启停任务 → 查仓位/决策 → 删任务 → 删目标 → 登出。
+
+前置：
+
+- gofollow 与本前端服务（或 `npm run dev`）都已在跑；
+- `SMOKE_KEY` 是一把只用于测试的私钥（不要用真实资金钱包的私钥）——脚本用它签名 SIWE 挑战，随机生成一把新私钥即可，其地址会自动注册为普通用户（非管理员），脚本也不会调用任何 `/admin/*` 接口；
+- 脚本会在数据库里留下一条钱包记录（删除钱包需要动作签名，脚本不做，留着不影响联调；可在页面上手动删除）；建的目标与任务会在脚本末尾自动删除。
+
+首次使用先在仓库根安装依赖（只有 `viem` 一个依赖，用于本地签名）：
+
+```bash
+npm install
+```
+
+然后运行：
+
+```bash
+SMOKE_KEY=0x$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))") \
+BASE=http://127.0.0.1:8080/api \
+node scripts/smoke.mjs
+```
+
+（也可以用 `npm run smoke` 代替 `node scripts/smoke.mjs`，环境变量照旧。）每一步成功会打印 `✓ METHOD path → status`；任一步失败会抛出包含状态码与响应体的错误并以非零码退出。
