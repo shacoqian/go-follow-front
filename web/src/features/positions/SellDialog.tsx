@@ -41,6 +41,8 @@ export function SellDialog({
   })
 
   function handleOpenChange(o: boolean) {
+    // 卖出请求在途时不让关：关掉就看不到提交结果了。
+    if (!o && m.isPending) return
     if (!o) {
       setPct(100)
       setError(null)
@@ -56,7 +58,7 @@ export function SellDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange} title="手动卖出">
+    <Dialog open={open} onOpenChange={handleOpenChange} title="手动卖出" hideClose={m.isPending}>
       <div className="space-y-3">
         <div className="space-y-1">
           <span className="text-sm text-slate-600">卖出比例</span>

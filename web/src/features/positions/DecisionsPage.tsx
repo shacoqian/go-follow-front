@@ -10,7 +10,7 @@ import { useTasks } from '@/features/tasks/useTasks'
 import { useTargets } from '@/features/targets/useTargets'
 import { useWallets } from '@/features/wallets/useWallets'
 import { unitsToUsdg } from '@/lib/amount'
-import { fmtTime } from '@/lib/format'
+import { fmtPrice, fmtTime } from '@/lib/format'
 import { outcomeTone, OUTCOMES } from './outcome'
 import { taskOptions as buildTaskOptions } from './taskLabel'
 
@@ -78,7 +78,7 @@ export default function DecisionsPage() {
                 <Td>{d.reason}</Td>
                 <Td>{d.side === 'SELL' ? '—' : unitsToUsdg(d.planned_amount_in)}</Td>
                 <Td>{d.quoted_out}</Td>
-                <Td>{d.quoted_price_usdg}</Td>
+                <Td>{fmtPrice(d.quoted_price_usdg)}</Td>
                 <Td>{d.error}</Td>
               </Tr>
             ))}

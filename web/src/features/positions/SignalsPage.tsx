@@ -38,7 +38,7 @@ export default function SignalsPage() {
 
   const targetOptions = (targets ?? []).map((t) => ({
     value: t.address.toLowerCase(),
-    label: `${t.label || shortAddress(t.address)} ${shortAddress(t.address)}`,
+    label: t.label ? `${t.label} ${shortAddress(t.address)}` : shortAddress(t.address),
   }))
   const rows = query.data ?? []
   const canLoadMore = limit < LIMIT_MAX && rows.length >= limit
@@ -65,11 +65,20 @@ export default function SignalsPage() {
           <Table head={['时间', '块号', '目标', '方向', '代币', '数量', '计价', '场所']}>
             {rows.map((s) => {
               const url = addressUrl(s.token)
+              const targetUrl = addressUrl(s.target_addr)
               return (
                 <Tr key={s.id}>
                   <Td>{fmtTime(s.seen_at)}</Td>
                   <Td>{s.block}</Td>
-                  <Td>{shortAddress(s.target_addr)}</Td>
+                  <Td>
+                    {targetUrl ? (
+                      <a className="font-mono underline" href={targetUrl} target="_blank" rel="noreferrer">
+                        {shortAddress(s.target_addr)}
+                      </a>
+                    ) : (
+                      <span className="font-mono">{shortAddress(s.target_addr)}</span>
+                    )}
+                  </Td>
                   <Td>{s.side}</Td>
                   <Td>
                     {url ? (

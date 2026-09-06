@@ -49,3 +49,10 @@ it('lists decisions with outcome badges and filters by task/outcome; load more g
   await userEvent.click(screen.getByRole('button', { name: '加载更多' }))
   expect(decisionsApi.list).toHaveBeenLastCalledWith({ limit: 100 })
 })
+
+it('formats the quoted price to 6 decimal places without trailing zeros', async () => {
+  const odd = { ...d(1, 'DRY_RUN'), quoted_price_usdg: 100 / 3 }
+  vi.mocked(decisionsApi.list).mockResolvedValue([odd])
+  renderPage()
+  expect(await screen.findByText('33.333333')).toBeInTheDocument()
+})

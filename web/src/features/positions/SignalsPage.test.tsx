@@ -32,3 +32,14 @@ it('lists signals and filters by target', async () => {
   await userEvent.selectOptions(screen.getByLabelText('目标'), s.target_addr)
   expect(signalsApi.list).toHaveBeenLastCalledWith({ target: s.target_addr, limit: 50 })
 })
+
+it('shows the short address only when a target has no label', async () => {
+  vi.mocked(targetsApi.list).mockResolvedValue([{ id: 2, address: s.target_addr, label: '', note: '', created_at: '' }])
+  render(
+    <QueryClientProvider client={makeQueryClient()}>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><SignalsPage /></MemoryRouter>
+    </QueryClientProvider>,
+  )
+  await screen.findByText('55843185')
+  expect(screen.getByRole('option', { name: '0x2222…2222' })).toBeInTheDocument()
+})

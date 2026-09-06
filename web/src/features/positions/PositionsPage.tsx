@@ -12,6 +12,12 @@ import { PositionRow } from './PositionRow'
 import { SellDialog } from './SellDialog'
 import { taskOptions as buildTaskOptions } from './taskLabel'
 
+function parseTaskId(raw: string | null): number | null {
+  if (!raw) return null
+  const n = Number(raw)
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
 export default function PositionsPage() {
   const [params, setParams] = useSearchParams()
   const { data: tasks } = useTasks()
@@ -19,8 +25,8 @@ export default function PositionsPage() {
   const { data: wallets } = useWallets()
   const qc = useQueryClient()
 
-  const initialTask = params.get('task')
-  const [taskId, setTaskId] = useState<number | null>(initialTask ? Number(initialTask) : null)
+  const initialTask = parseTaskId(params.get('task'))
+  const [taskId, setTaskId] = useState<number | null>(initialTask)
   const [sellPosition, setSellPosition] = useState<Position | null>(null)
 
   const positionsQuery = useQuery({

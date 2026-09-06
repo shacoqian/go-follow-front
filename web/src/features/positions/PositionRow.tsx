@@ -4,14 +4,9 @@ import { Button } from '@/components/ui/button'
 import { Tr, Td } from '@/components/ui/table'
 import { CopyButton } from '@/components/CopyButton'
 import { unitsToUsdg } from '@/lib/amount'
-import { shortAddress } from '@/lib/format'
+import { fmtPrice, shortAddress } from '@/lib/format'
 import { addressUrl } from '@/lib/explorer'
 import { exitBlockedText } from './exitState'
-
-// avg_price_usdg 是浮点数，最多展示 6 位小数并去掉多余的尾随 0。
-function fmtPrice(n: number): string {
-  return n.toFixed(6).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
-}
 
 export function PositionRow({ position: p, onSell }: { position: Position; onSell(): void }) {
   const url = addressUrl(p.token)

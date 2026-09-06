@@ -75,6 +75,14 @@ it('preselects the task from the query string and lists positions with badges an
   expect(within(row).getByText(/退出受阻：reserve_short，连续 2 次/)).toBeInTheDocument()
 })
 
+it('ignores a non-numeric task query param and shows no selection', async () => {
+  renderPage('/positions?task=abc')
+  expect(await screen.findByLabelText('任务')).toHaveValue('')
+  expect(screen.getAllByText('请选择任务').length).toBeGreaterThan(0)
+  expect(screen.queryByText('#NaN')).not.toBeInTheDocument()
+  expect(positionsApi.byTask).not.toHaveBeenCalled()
+})
+
 it('sells a percentage and shows the result; errors render inline', async () => {
   vi.mocked(positionsApi.sell).mockResolvedValueOnce({ outcome: 'DRY_RUN', reason: 'manual', sell_qty: '500', quoted_out: '4000000' })
   renderPage()
