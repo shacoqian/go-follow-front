@@ -145,9 +145,10 @@ export async function runSwitchChain(
     if (chainBusy === chain) {
       chainBusy = null
       notifySwitchBusy()
-      // 整条链路（含失败分支里的 logout）都落定、chainBusy 也清掉之后才补跑，不然"先补跑 C、
-      // C 刚登进去，随后才轮到的失败处理里的 logout() 又把 C 的会话一起清掉"这种错误顺序就会
-      // 发生。
+      // 整条链路（含失败分支里的收尾，比如 accounts 为空时的 logout()，或者下面
+      // handleAccountsChanged 自动切换失败时的 clearSession()+forgetSession()）都落定、
+      // chainBusy 也清掉之后才补跑，不然"先补跑 C、C 刚登进去，随后才轮到的失败收尾又把 C 的
+      // 会话一起清掉"这种错误顺序就会发生。
       if (pendingAccounts) {
         const latched = pendingAccounts
         pendingAccounts = null
@@ -198,11 +199,13 @@ export async function signAction(action: string, params: Record<string, string>)
 
 // 被动清会话时顺手忘掉这个地址的缓存——被后端拒绝的会话不该再留在 saved 里等下次切换免签时
 // 又被拿出来用一次。main.tsx 的 configureClient 拿这个当 onUnauthorized；下面 refreshMe 的
-// 401/403 分支是同一件事的另一个触发点。
+// 401/403 分支是同一件事的另一个触发点。清完顺手清一下查询缓存：接下来大概率是走登录页
+// 重新签名登录另一个地址，A 的列表数据不该在 B 登进去之后还闪一下。
 export function onUnauthorized(): void {
   const s = useSession.getState().session
   clearSession()
   if (s) forgetSession(s.address)
+  queryClient.clear()
 }
 
 // 启动时校验会话并刷新角色。401/403 清会话（并忘掉这个地址的缓存，理由同 onUnauthorized）；
@@ -281,10 +284,12 @@ function handleAccountsChanged(accounts: string[]): void {
       // 没能切成功的目标地址的缓存（下次别再拿它免签重试），本机记住的其它地址原样保留：
       // 下拉的价值就在于这些缓存，一次自动切换失败不该把它们全部清空。跟用户主动点登出、
       // 或者上面 accounts 为空（插件撤销了整个授权）那种"全部都不认了"的场景不是一回事，
-      // 那两种才用 logout()/clearAllSessions()。
+      // 那两种才用 logout()/clearAllSessions()。查询缓存还是要清：接下来大概率要用另一个
+      // 地址重新登录，A 的列表数据不该在新账号登进去之后还闪一下。
       toast.error('切换账号失败，请重新登录')
       clearSession()
       forgetSession(next)
+      queryClient.clear()
     },
   })
 }
@@ -292,8 +297,9 @@ function handleAccountsChanged(accounts: string[]): void {
 export function watchAccountChanges(): () => void {
   if (!isOkxInstalled()) return () => {}
   return onAccountsChanged((accounts) => {
-    // 用 chainBusy 而不是 inFlight：chainBusy 覆盖到成功/失败收尾（含失败分支的 logout），
-    // inFlight 在 switchAccount 内部一结束就清了，中间那段空档会被撞出竞态，见上面的注释。
+    // 用 chainBusy 而不是 inFlight：chainBusy 覆盖到成功/失败收尾（含失败分支里的
+    // clearSession()/forgetSession()，或者 accounts 为空时的 logout()），inFlight 在
+    // switchAccount 内部一结束就清了，中间那段空档会被撞出竞态，见上面的注释。
     if (chainBusy) {
       pendingAccounts = accounts
       return

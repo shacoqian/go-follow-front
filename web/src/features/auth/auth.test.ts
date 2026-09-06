@@ -152,6 +152,7 @@ it('watchAccountChanges signs in automatically as the new account when the plugi
 })
 
 it('clears only the current session (not the backend token, not other saved sessions) when auto sign-in after a plugin switch fails', async () => {
+  const clear = vi.spyOn(queryClient, 'clear')
   await loginWithOkx() // 会话 A，缓存 saved[A]
   let handler: (accounts: string[]) => void = () => {}
   vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
@@ -168,6 +169,10 @@ it('clears only the current session (not the backend token, not other saved sess
   expect(toast.error).toHaveBeenCalledWith('切换账号失败，请重新登录')
   expect(useSession.getState().saved[ADDR.toLowerCase()]?.token).toBe('tok') // A 的缓存原样保留
   expect(useSession.getState().saved[ADDR_B.toLowerCase()]).toBeUndefined() // 没能切成功的 B 不留缓存
+  // 查询缓存也要清：接下来大概率要用另一个地址重新登录，A 的列表数据不该在新账号登进去之后
+  // 还闪一下。
+  expect(clear).toHaveBeenCalledTimes(1)
+  clear.mockRestore()
 })
 
 it('a failed auto-switch only forgets its own target address, leaving every other saved session intact', async () => {
@@ -460,13 +465,19 @@ it('rejects a switchAccount call while another one is already in flight', async 
 })
 
 it('onUnauthorized clears only the current session and forgets its own saved copy, leaving other addresses cached', async () => {
+  const clear = vi.spyOn(queryClient, 'clear')
   await loginWithOkx() // 会话 A，缓存 saved[A]
   vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
   await switchAccount(ADDR_B) // 会话 B，缓存 saved[A]、saved[B]
+  clear.mockClear() // 只看 onUnauthorized 自己触发的那一次，不算上面 switchAccount 成功切换那次
   onUnauthorized()
   expect(sessionToken()).toBeNull()
   expect(useSession.getState().saved[ADDR_B.toLowerCase()]).toBeUndefined() // 当前地址 B 的缓存被忘掉
   expect(useSession.getState().saved[ADDR.toLowerCase()]?.token).toBe('tok') // 别的地址 A 还留着
+  // 查询缓存也要清：接下来大概率要重新登录另一个地址，B 的列表数据不该在新账号登进去之后
+  // 还闪一下。
+  expect(clear).toHaveBeenCalledTimes(1)
+  clear.mockRestore()
 })
 
 it('refreshMe forgets the current address\'s saved session on a 403', async () => {
