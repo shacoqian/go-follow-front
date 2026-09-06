@@ -1,0 +1,70 @@
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly data?: unknown,
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+export const API_BASE = '/api'
+
+type Method = 'GET' | 'POST' | 'PUT' | 'DELETE'
+
+let tokenSource: () => string | null = () => null
+let unauthorized: () => void = () => {}
+
+// 由应用入口注入：token 来自会话 store，401 时清会话（幂等，多个并发 401 也只是重复清空）。
+export function configureClient(opts: { token: () => string | null; onUnauthorized: () => void }): void {
+  tokenSource = opts.token
+  unauthorized = opts.onUnauthorized
+}
+
+export function messageFor(status: number, backendMessage: string): string {
+  switch (status) {
+    case 401:
+      return '登录已失效，请重新登录'
+    case 403:
+      return backendMessage || '账号已被管理员锁定'
+    case 404:
+      return '资源不存在或无权访问'
+    case 429:
+      return '操作过于频繁，请稍后再试'
+  }
+  if (status >= 500) return backendMessage || '内部错误'
+  return backendMessage || `请求失败（${status}）`
+}
+
+export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {}
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  const token = tokenSource()
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  let res: Response
+  try {
+    res = await fetch(API_BASE + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+  } catch {
+    throw new ApiError(0, '无法连接服务')
+  }
+
+  const text = await res.text()
+  let data: unknown = null
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      data = null
+    }
+  }
+  if (res.ok) return data as T
+
+  const backendMessage =
+    data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string'
+      ? (data as { error: string }).error
+      : ''
+  if (res.status === 401) unauthorized()
+  throw new ApiError(res.status, messageFor(res.status, backendMessage), data ?? undefined)
+}
