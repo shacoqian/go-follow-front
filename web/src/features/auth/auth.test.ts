@@ -1,4 +1,5 @@
 import { ApiError } from '@/api/client'
+import type { VerifyResponse } from '@/api/types'
 
 vi.mock('@/wallets/okx', () => ({
   isOkxInstalled: vi.fn(() => true),
@@ -106,6 +107,78 @@ it('watchAccountChanges logs out when the wallet switches to another address', a
 })
 
 const ADDR_B = '0x1234567890123456789012345678901234567890'
+
+it('watchAccountChanges keeps the session when its address is still among the authorized accounts', async () => {
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  await loginAs(ADDR_B)
+  let handler: (accounts: string[]) => void = () => {}
+  vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
+    handler = cb
+    return () => {}
+  })
+  watchAccountChanges()
+  handler([ADDR, ADDR_B])
+  expect(sessionToken()).toBe('tok-b')
+})
+
+it('watchAccountChanges logs out once its address drops out of a shrunk account list', async () => {
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  await loginAs(ADDR_B)
+  let handler: (accounts: string[]) => void = () => {}
+  vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
+    handler = cb
+    return () => {}
+  })
+  watchAccountChanges()
+  handler([ADDR])
+  await vi.waitFor(() => expect(sessionToken()).toBeNull())
+})
+
+it('watchAccountChanges logs out when accountsChanged reports an empty list', async () => {
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  await loginAs(ADDR_B)
+  let handler: (accounts: string[]) => void = () => {}
+  vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
+    handler = cb
+    return () => {}
+  })
+  watchAccountChanges()
+  handler([])
+  await vi.waitFor(() => expect(sessionToken()).toBeNull())
+})
+
+it('watchAccountChanges ignores accountsChanged events fired while switchAccount is in flight', async () => {
+  await loginWithOkx()
+  let handler: (accounts: string[]) => void = () => {}
+  vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
+    handler = cb
+    return () => {}
+  })
+  watchAccountChanges()
+  let resolveVerify: (v: VerifyResponse) => void = () => {}
+  vi.mocked(authApi.verify).mockReturnValueOnce(new Promise((resolve) => { resolveVerify = resolve }))
+  const switching = switchAccount(ADDR_B)
+  // 插件在切换过程中自己也会连着触发 accountsChanged，此时事件应该被忽略，不能把还没换完的会话登出。
+  handler([ADDR_B])
+  expect(sessionToken()).toBe('tok')
+  resolveVerify({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  await switching
+  expect(sessionToken()).toBe('tok-b')
+})
+
+it('logout does not clobber a session that was replaced while awaiting the API', async () => {
+  await loginWithOkx()
+  let resolveLogout: () => void = () => {}
+  vi.mocked(authApi.logout).mockReturnValueOnce(new Promise((resolve) => { resolveLogout = () => resolve(undefined) }))
+  const pending = logout()
+  // logout 还卡在 await authApi.logout() 的时候，另一条链路（比如 switchAccount）已经把会话换成了 B。
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  await loginAs(ADDR_B)
+  resolveLogout()
+  await pending
+  expect(sessionToken()).toBe('tok-b')
+  expect(useSession.getState().session?.address).toBe(ADDR_B.toLowerCase())
+})
 
 it('loginAs signs in with the given address without calling requestAccounts', async () => {
   const s = await loginAs(ADDR_B)

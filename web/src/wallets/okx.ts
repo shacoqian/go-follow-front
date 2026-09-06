@@ -64,12 +64,13 @@ export async function listAccounts(): Promise<string[]> {
 }
 
 // 部分钱包/RPC 转发层不认识某个方法时会用 4200（unsupported method）或 -32601（method not found）
-// 之类的错误码，或者干脆在 message 里写 "method not supported"——三者都当作"不支持"处理。
+// 之类的错误码，或者在 message 里写 "method not supported" / "method not found" / "unsupported method"
+// 这几种措辞之一——都当作"不支持"处理。
 function isUnsupportedMethodError(e: unknown): boolean {
   const code = typeof e === 'object' && e !== null && 'code' in e ? (e as { code?: unknown }).code : undefined
   if (code === 4200 || code === -32601) return true
   const message = e instanceof Error ? e.message : typeof e === 'object' && e !== null && 'message' in e ? String((e as { message?: unknown }).message) : ''
-  return /method not supported/i.test(message)
+  return /method (not (supported|found))|unsupported method/i.test(message)
 }
 
 // 弹插件的账号勾选框，让用户追加/取消对本站的授权。用户在弹窗里点了拒绝（4001）要把错误抛出去，
@@ -85,9 +86,10 @@ export async function requestPermissions(): Promise<boolean> {
 }
 
 // EIP-2255 的 wallet_getPermissions 不是所有钱包都实现；探测它是否可用来判断能不能显示
-// "管理授权账号…" 入口。探测本身失败但看不出是"不支持"信号时，保守返回 true——
-// 真出问题会在用户点击 requestPermissions 时再暴露，交给那里的错误处理。
+// "管理授权账号…" 入口。没装钱包时直接当不支持处理；探测本身失败但看不出是"不支持"信号时，
+// 保守返回 true——真出问题会在用户点击 requestPermissions 时再暴露，交给那里的错误处理。
 export async function supportsRequestPermissions(): Promise<boolean> {
+  if (!isOkxInstalled()) return false
   try {
     await okxProvider().request({ method: 'wallet_getPermissions' })
     return true

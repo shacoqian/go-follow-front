@@ -29,24 +29,38 @@ export async function loginWithOkx(): Promise<Session> {
   return loginAs(address)
 }
 
+// switchAccount 进行中：watchAccountChanges 收到的 accountsChanged 事件先别处理——插件在
+// 用户确认切换前后可能连着触发好几次事件，此时会话本来就要变，不该被当成"外部切走了"而登出。
+let switching = false
+
 // 多账号切换：对新地址重新签名登录，成功后清空查询缓存（换账号不能看到上一个账号的数据）。
 // 签名被拒或插件只认当前选中账号时 loginAs 会抛错，原样往上抛——会话和缓存都不动，
 // 调用方（AccountMenu）负责把下拉值退回原会话地址并提示用户。
 export async function switchAccount(address: string): Promise<void> {
-  await loginAs(address)
-  queryClient.clear()
+  switching = true
+  try {
+    await loginAs(address)
+    queryClient.clear()
+  } finally {
+    switching = false
+  }
 }
 
 // 登出：后端失败也要清本地会话——用户点了登出就不该还留在登录态。
+// 但 await 后端那一下的空档里，会话可能已经被别的流程（比如 switchAccount 登录成功）替换成
+// 新账号——这时不能把新会话也清掉，只清自己进来时看到的那个会话还在场的情况。
 export async function logout(): Promise<void> {
+  const before = useSession.getState().session
   try {
     await authApi.logout()
   } catch {
     // ignore
   } finally {
-    clearSession()
-    // 换人登录不能看到上一个账号的数据：会话清了，缓存也得清。
-    queryClient.clear()
+    if (useSession.getState().session?.token === before?.token) {
+      clearSession()
+      // 换人登录不能看到上一个账号的数据：会话清了，缓存也得清。
+      queryClient.clear()
+    }
   }
 }
 
@@ -71,13 +85,17 @@ export async function refreshMe(): Promise<boolean> {
   }
 }
 
-// 钱包切换账号：新地址不等于会话地址就登出，避免用 A 的会话操作 B 的钱包。
+// 钱包切换账号：保护的本意是"会话地址一旦不再被插件授权就不能继续用"，不是"插件当前选中的地址
+// 必须等于会话地址"——eth_accounts[0] 只是插件当前选中项，管理授权/锁定解锁之类操作也会触发
+// accountsChanged 但顺序里第一项未必是会话地址。所以只在会话地址整个从新列表里消失时才登出；
+// switchAccount 进行中的事件一律忽略，那本来就是会话要变的预期路径。
 export function watchAccountChanges(): () => void {
   if (!isOkxInstalled()) return () => {}
   return onAccountsChanged((accounts) => {
+    if (switching) return
     const s = useSession.getState().session
     if (!s) return
-    const current = accounts[0]?.toLowerCase()
-    if (current !== s.address) void logout()
+    const present = accounts.some((a) => a.toLowerCase() === s.address)
+    if (!present) void logout()
   })
 }

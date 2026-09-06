@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
+import { getAddress } from 'viem'
 import { Select } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
+import { ApiError } from '@/api/client'
 import { shortAddress } from '@/lib/format'
 import { switchAccount } from '@/features/auth/auth'
 import { useSession } from '@/features/auth/session'
@@ -33,11 +35,14 @@ export default function AccountMenu() {
   }, [session?.address])
 
   const mutation = useMutation({
-    mutationFn: (address: string) => switchAccount(address),
+    // 选项值是小写地址（方便跟会话地址比较），真正签名登录要用 checksum 形式，和其它签名调用保持一致。
+    mutationFn: (address: string) => switchAccount(getAddress(address)),
     meta: { silent: true },
     onSuccess: () => toast.success('已切换账号'),
-    onError: () => {
-      toast.error('请在 OKX 里切到该账号后重试')
+    onError: (err) => {
+      // 后端明确拒绝（账号被锁定、限流等）展示后端原话；签名被拒/插件只认当前账号这类钱包侧
+      // 失败没有具体后端消息，用设计稿里给的固定文案。
+      toast.error(err instanceof ApiError ? err.message : '请在 OKX 里切到该账号后重试')
       setValue(session?.address ?? '')
     },
   })
@@ -69,5 +74,14 @@ export default function AccountMenu() {
     mutation.mutate(next)
   }
 
-  return <Select aria-label="账号" className="w-auto font-mono" options={options} value={value} onChange={onChange} />
+  return (
+    <Select
+      aria-label="账号"
+      className="w-auto font-mono"
+      options={options}
+      value={value}
+      onChange={onChange}
+      disabled={mutation.isPending}
+    />
+  )
 }

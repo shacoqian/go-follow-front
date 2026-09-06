@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
+import { getAddress } from 'viem'
 
 vi.mock('@/features/auth/auth', () => ({ switchAccount: vi.fn() }))
 vi.mock('@/features/auth/useOkxAccounts', () => ({ useOkxAccounts: vi.fn() }))
@@ -10,6 +11,7 @@ import { switchAccount } from '@/features/auth/auth'
 import { useOkxAccounts } from '@/features/auth/useOkxAccounts'
 import { requestPermissions, supportsRequestPermissions } from '@/wallets/okx'
 import { useSession } from '@/features/auth/session'
+import { ApiError } from '@/api/client'
 import { useToasts, Toaster } from '@/components/ui/toast'
 import { makeQueryClient } from './queryClient'
 import AccountMenu from './AccountMenu'
@@ -94,4 +96,39 @@ it('requests permissions and refreshes accounts when "manage" is selected', asyn
   await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1))
   expect(select).toHaveValue(A)
   expect(switchAccount).not.toHaveBeenCalled()
+})
+
+it('passes a checksummed address into switchAccount, not the lowercase option value', async () => {
+  const C = '0xabcdef1234567890abcdef1234567890abcdef12'
+  vi.mocked(useOkxAccounts).mockReturnValue({ accounts: [A, C], current: A, refresh: vi.fn(async () => {}) })
+  vi.mocked(switchAccount).mockResolvedValueOnce(undefined)
+  renderMenu()
+  const select = await screen.findByLabelText('账号')
+  await userEvent.selectOptions(select, C.toLowerCase())
+  expect(switchAccount).toHaveBeenCalledWith(getAddress(C))
+  expect(switchAccount).not.toHaveBeenCalledWith(C.toLowerCase())
+})
+
+it('disables the select while a switch is in flight', async () => {
+  let resolveSwitch: () => void = () => {}
+  vi.mocked(switchAccount).mockReturnValueOnce(
+    new Promise((resolve) => {
+      resolveSwitch = () => resolve(undefined)
+    }),
+  )
+  renderMenu()
+  const select = await screen.findByLabelText('账号')
+  await userEvent.selectOptions(select, B)
+  await waitFor(() => expect(select).toBeDisabled())
+  resolveSwitch()
+  await waitFor(() => expect(select).not.toBeDisabled())
+})
+
+it('shows the backend message for an ApiError instead of the generic wallet-switch copy', async () => {
+  vi.mocked(switchAccount).mockRejectedValueOnce(new ApiError(403, '账号已被管理员锁定'))
+  renderMenu()
+  const select = await screen.findByLabelText('账号')
+  await userEvent.selectOptions(select, B)
+  expect(await screen.findByText('账号已被管理员锁定')).toBeInTheDocument()
+  expect(screen.queryByText('请在 OKX 里切到该账号后重试')).not.toBeInTheDocument()
 })

@@ -136,3 +136,15 @@ it('supportsRequestPermissions infers true when the probe succeeds', async () =>
   fake.request.mockResolvedValue([])
   await expect(supportsRequestPermissions()).resolves.toBe(true)
 })
+
+it('supportsRequestPermissions resolves false when OKX is not installed', async () => {
+  await expect(supportsRequestPermissions()).resolves.toBe(false)
+})
+
+it('isUnsupportedMethodError also recognizes "method not found" and "unsupported method" wording', async () => {
+  const fake = installFake()
+  fake.request.mockRejectedValueOnce({ message: 'method not found' })
+  await expect(supportsRequestPermissions()).resolves.toBe(false)
+  fake.request.mockRejectedValueOnce({ message: 'unsupported method: wallet_getPermissions' })
+  await expect(supportsRequestPermissions()).resolves.toBe(false)
+})
