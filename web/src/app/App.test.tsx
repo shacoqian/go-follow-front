@@ -7,6 +7,8 @@ vi.mock('@/api/wallets', () => ({
   walletsApi: { list: vi.fn(), create: vi.fn(), update: vi.fn(), disable: vi.fn(), exportKey: vi.fn(), remove: vi.fn(), withdraw: vi.fn(), withdrawals: vi.fn() },
   withdrawalsApi: { get: vi.fn() },
 }))
+vi.mock('@/api/targets', () => ({ targetsApi: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() } }))
+vi.mock('@/api/tasks', () => ({ tasksApi: { list: vi.fn() } }))
 vi.mock('@/wallets/okx', () => ({
   waitForOkx: vi.fn(async () => true),
   isOkxInstalled: vi.fn(() => true),
@@ -21,6 +23,8 @@ vi.mock('@/features/auth/auth', async (importOriginal) => {
 
 import { healthApi } from '@/api/health'
 import { walletsApi } from '@/api/wallets'
+import { targetsApi } from '@/api/targets'
+import { tasksApi } from '@/api/tasks'
 import { refreshMe, watchAccountChanges } from '@/features/auth/auth'
 import { waitForOkx } from '@/wallets/okx'
 import { useSession } from '@/features/auth/session'
@@ -45,6 +49,8 @@ beforeEach(() => {
   vi.mocked(watchAccountChanges).mockReturnValue(() => {})
   vi.mocked(healthApi.get).mockResolvedValue({ dry_run: false, kill_switch: false, engine_last_block: 1, node_block: 1 })
   vi.mocked(walletsApi.list).mockResolvedValue([])
+  vi.mocked(targetsApi.list).mockResolvedValue([])
+  vi.mocked(tasksApi.list).mockResolvedValue([])
 })
 
 it('redirects an anonymous visitor to the login page', () => {
