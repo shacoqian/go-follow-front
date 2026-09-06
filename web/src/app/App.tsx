@@ -11,8 +11,9 @@ import DecisionsPage from '@/features/positions/DecisionsPage'
 import SignalsPage from '@/features/positions/SignalsPage'
 import OverviewPage from '@/features/admin/OverviewPage'
 import UsersPage from '@/features/admin/UsersPage'
+import DataPage from '@/features/admin/DataPage'
+import AuditPage from '@/features/admin/AuditPage'
 import { Toaster } from '@/components/ui/toast'
-import Placeholder from './Placeholder'
 import RequireAdmin from './RequireAdmin'
 import RequireAuth from './RequireAuth'
 import Shell from './Shell'
@@ -36,8 +37,8 @@ export function AppRoutes() {
           <Route element={<RequireAdmin />}>
             <Route path="/admin/overview" element={<OverviewPage />} />
             <Route path="/admin/users" element={<UsersPage />} />
-            <Route path="/admin/data" element={<Placeholder title="全站数据" />} />
-            <Route path="/admin/audit" element={<Placeholder title="审计" />} />
+            <Route path="/admin/data" element={<DataPage />} />
+            <Route path="/admin/audit" element={<AuditPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/wallets" replace />} />
         </Route>

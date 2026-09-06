@@ -58,7 +58,8 @@ export const adminApi = {
   decisions: (owner?: string) => request<Decision[]>('GET', `/admin/decisions${qs({ owner })}`, undefined),
   wallets: (owner?: string) =>
     request<(Wallet & { owner: string })[]>('GET', `/admin/wallets${qs({ owner })}`, undefined),
-  withdrawals: (owner?: string) => request<Withdrawal[]>('GET', `/admin/withdrawals${qs({ owner })}`, undefined),
+  withdrawals: (owner?: string) =>
+    request<(Withdrawal & { owner: string })[]>('GET', `/admin/withdrawals${qs({ owner })}`, undefined),
   enableTask: (id: number) => request<void>('POST', `/admin/tasks/${id}/enable`, undefined),
   disableTask: (id: number) => request<void>('POST', `/admin/tasks/${id}/disable`, undefined),
   audit: (p: { owner?: string; action?: string; limit: number }) =>

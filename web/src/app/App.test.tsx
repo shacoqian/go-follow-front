@@ -13,7 +13,21 @@ vi.mock('@/api/positions', () => ({ positionsApi: { byTask: vi.fn(), sell: vi.fn
 vi.mock('@/api/decisions', () => ({ decisionsApi: { list: vi.fn() } }))
 vi.mock('@/api/signals', () => ({ signalsApi: { list: vi.fn() } }))
 vi.mock('@/api/admin', () => ({
-  adminApi: { overview: vi.fn(), users: vi.fn(), setSetting: vi.fn(), lockUser: vi.fn(), unlockUser: vi.fn() },
+  adminApi: {
+    overview: vi.fn(),
+    users: vi.fn(),
+    setSetting: vi.fn(),
+    lockUser: vi.fn(),
+    unlockUser: vi.fn(),
+    tasks: vi.fn(),
+    positions: vi.fn(),
+    wallets: vi.fn(),
+    withdrawals: vi.fn(),
+    decisions: vi.fn(),
+    enableTask: vi.fn(),
+    disableTask: vi.fn(),
+    audit: vi.fn(),
+  },
 }))
 vi.mock('@/wallets/okx', () => ({
   waitForOkx: vi.fn(async () => true),

@@ -16,13 +16,20 @@ const SELL_MODE_TEXT: Record<Task['sell_mode'], string> = {
   all: '全部卖',
 }
 
-function summaryText(t: Task): string {
+export function taskSummaryText(t: Task): string {
   const size =
     t.size_mode === 'fixed'
       ? `固定 ${unitsToUsdg(t.size_value)} USDG`
       : `比例 ${bpsToPct(Number(t.size_value))}%${ratioSummary(t)}`
   const tpOn = t.take_profit_bps > 0 || t.stop_loss_bps > 0 || t.max_hold_sec > 0
   return `${size}${targetFilterSummary(t)} · ${SELL_MODE_TEXT[t.sell_mode]}${tpOn ? ' · 止盈止损' : ''}`
+}
+
+// 任务状态角标：运行中 / 被管理员禁用 / 已停止。DataPage 的任务标签复用同一份逻辑，避免和这里的角标不一致。
+export function taskStatusBadge(t: Task): { tone: 'green' | 'red' | 'gray'; label: string } {
+  if (t.enabled) return { tone: 'green', label: '运行中' }
+  if (t.paused_reason === 'admin') return { tone: 'red', label: '管理员禁用' }
+  return { tone: 'gray', label: '已停止' }
 }
 
 export function TaskRow({
@@ -56,13 +63,7 @@ export function TaskRow({
       </Td>
       <Td>{wallet ? wallet.label || '（未命名）' : `#${t.wallet_id}`}</Td>
       <Td>
-        {t.enabled ? (
-          <Badge tone="green">运行中</Badge>
-        ) : adminPaused ? (
-          <Badge tone="red">管理员禁用</Badge>
-        ) : (
-          <Badge tone="gray">已停止</Badge>
-        )}
+        <Badge tone={taskStatusBadge(t).tone}>{taskStatusBadge(t).label}</Badge>
       </Td>
       <Td>
         {limitUnlimited ? (
@@ -76,7 +77,7 @@ export function TaskRow({
           </div>
         )}
       </Td>
-      <Td>{summaryText(t)}</Td>
+      <Td>{taskSummaryText(t)}</Td>
       <Td>
         <div className="flex flex-wrap gap-1">
           {t.enabled ? (
