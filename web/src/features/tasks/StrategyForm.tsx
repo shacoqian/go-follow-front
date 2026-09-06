@@ -6,15 +6,20 @@ import { Select } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
-import { PLATFORMS, QUOTE_ASSETS, defaultStrategy, strategySchema, type StrategyValues } from './strategySchema'
+import {
+  FIXED_DEFAULTS,
+  PLATFORMS,
+  QUOTE_ASSETS,
+  RATIO_DEFAULTS,
+  defaultStrategy,
+  strategySchema,
+  type StrategyValues,
+} from './strategySchema'
 
 const SIZE_MODE_OPTIONS = [
   { value: 'fixed', label: '固定金额' },
   { value: 'ratio', label: '按比例' },
 ]
-
-// 买入模式各自的默认额度：固定金额按 USDG 计，比例按 % 计。
-const SIZE_VALUE_DEFAULT = { fixed: '10', ratio: '5' } as const
 
 const SELL_MODE_OPTIONS = [
   { value: 'manual', label: '手动' },
@@ -37,15 +42,17 @@ export function StrategyForm({
   defaultValues,
   submitText,
   busy,
+  submitDisabled,
   onSubmit,
 }: {
   defaultValues: StrategyValues
   submitText: string
   busy?: boolean
+  submitDisabled?: boolean
   onSubmit(values: StrategyValues): void
 }) {
   const form = useForm<StrategyValues>({ resolver: zodResolver(strategySchema), defaultValues })
-  const { register, control, watch } = form
+  const { register, control, watch, setValue } = form
   const { errors } = form.formState
   const sizeMode = watch('size_mode')
   const tpEnabled = watch('tp_enabled')
@@ -61,30 +68,79 @@ export function StrategyForm({
             options={SIZE_MODE_OPTIONS}
             {...register('size_mode', {
               onChange: (e) => {
-                const next = e.target.value === 'ratio' ? SIZE_VALUE_DEFAULT.ratio : SIZE_VALUE_DEFAULT.fixed
-                form.setValue('size_value', next, { shouldValidate: false })
+                if (e.target.value === 'ratio') {
+                  setValue('size_value', RATIO_DEFAULTS.size_value, { shouldValidate: false })
+                  setValue('ratio_min', RATIO_DEFAULTS.ratio_min, { shouldValidate: false })
+                  setValue('max_per_trade', RATIO_DEFAULTS.max_per_trade, { shouldValidate: false })
+                } else {
+                  setValue('size_value', FIXED_DEFAULTS.size_value, { shouldValidate: false })
+                }
               },
             })}
           />
         </Field>
-        <Field
-          label={sizeMode === 'fixed' ? '固定金额（USDG）' : '比例（%）'}
-          htmlFor="size_value"
-          error={errors.size_value?.message}
-        >
-          <Input id="size_value" {...register('size_value')} />
-        </Field>
-        <Field label="单笔上限（USDG）" htmlFor="max_per_trade" error={errors.max_per_trade?.message}>
-          <Input id="max_per_trade" {...register('max_per_trade')} />
-        </Field>
-        <Field label="目标最小交易额（USDG）" htmlFor="target_min" error={errors.target_min?.message}>
-          <Input id="target_min" {...register('target_min')} />
-        </Field>
+        {sizeMode === 'fixed' ? (
+          <Field
+            label="固定金额（USDG）"
+            htmlFor="size_value"
+            hint="目标买多少都不管，每笔买这个金额"
+            error={errors.size_value?.message}
+          >
+            <Input id="size_value" {...register('size_value')} />
+          </Field>
+        ) : (
+          <>
+            <Field
+              label="比例（%）"
+              htmlFor="size_value"
+              hint="我方金额 = 目标买入金额 × 比例，可超过 100"
+              error={errors.size_value?.message}
+            >
+              <Input id="size_value" {...register('size_value')} />
+            </Field>
+            <Field
+              label="我方下限（USDG，可选）"
+              htmlFor="ratio_min"
+              hint="算出来低于此值就按此值买"
+              error={errors.ratio_min?.message}
+            >
+              <Input id="ratio_min" {...register('ratio_min')} />
+            </Field>
+            <Field
+              label="我方上限（USDG，必填）"
+              htmlFor="max_per_trade"
+              hint="算出来高于此值就按此值买"
+              error={errors.max_per_trade?.message}
+            >
+              <Input id="max_per_trade" {...register('max_per_trade')} />
+            </Field>
+          </>
+        )}
         <Field label="总额度（USDG，0=不限）" htmlFor="spend_limit" error={errors.spend_limit?.message}>
           <Input id="spend_limit" {...register('spend_limit')} />
         </Field>
         <Field label="单币加仓次数" htmlFor="max_addon_per_token" error={errors.max_addon_per_token?.message}>
           <Input id="max_addon_per_token" type="number" step="1" {...register('max_addon_per_token', { valueAsNumber: true })} />
+        </Field>
+      </section>
+
+      <section className="space-y-3 rounded-md border border-slate-200 p-4">
+        <h2 className="text-sm font-semibold text-slate-700">目标买入过滤</h2>
+        <Field
+          label="目标最小买入（USDG，可选）"
+          htmlFor="target_min"
+          hint="目标单笔买入低于此值不跟"
+          error={errors.target_min?.message}
+        >
+          <Input id="target_min" {...register('target_min')} />
+        </Field>
+        <Field
+          label="目标最大买入（USDG，可选）"
+          htmlFor="target_max"
+          hint="目标单笔买入高于此值不跟"
+          error={errors.target_max?.message}
+        >
+          <Input id="target_max" {...register('target_max')} />
         </Field>
       </section>
 
@@ -213,7 +269,7 @@ export function StrategyForm({
       </section>
 
       <div className="flex justify-end">
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy || submitDisabled}>
           {submitText}
         </Button>
       </div>

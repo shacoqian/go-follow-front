@@ -59,11 +59,52 @@ it('lets percent fields accept decimals and keeps count fields integral', async 
   expect(screen.getByLabelText('最长持仓（分钟）')).toHaveAttribute('step', 'any')
 })
 
-it('resets the buy size to the mode default when the buy mode changes', async () => {
-  render(<StrategyForm defaultValues={defaultStrategy} submitText="创建" onSubmit={vi.fn()} />)
+it('fixed mode shows only the amount; ratio mode shows ratio + our bounds; target filter always visible', async () => {
+  const onSubmit = vi.fn()
+  render(<StrategyForm defaultValues={defaultStrategy} submitText="创建" onSubmit={onSubmit} />)
   expect(screen.getByLabelText('固定金额（USDG）')).toHaveValue('10')
+  expect(screen.queryByLabelText('我方上限（USDG，必填）')).not.toBeInTheDocument()
+  expect(screen.getByLabelText('目标最小买入（USDG，可选）')).toHaveValue('')
+  expect(screen.getByLabelText('目标最大买入（USDG，可选）')).toHaveValue('')
+
+  await userEvent.click(screen.getByRole('button', { name: '创建' }))
+  expect(onSubmit).toHaveBeenCalledWith(defaultStrategy)
+
   await userEvent.selectOptions(screen.getByLabelText('买入模式'), 'ratio')
-  expect(screen.getByLabelText('比例（%）')).toHaveValue('5')
+  expect(screen.getByLabelText('比例（%）')).toHaveValue('10')
+  expect(screen.getByLabelText('我方下限（USDG，可选）')).toHaveValue('')
+  expect(screen.getByLabelText('我方上限（USDG，必填）')).toHaveValue('20')
+  expect(screen.queryByLabelText('固定金额（USDG）')).not.toBeInTheDocument()
+
+  await userEvent.type(screen.getByLabelText('比例（%）'), '0') // 100%
+  await userEvent.type(screen.getByLabelText('我方下限（USDG，可选）'), '30')
+  await userEvent.click(screen.getByRole('button', { name: '创建' }))
+  expect(await screen.findByText('我方下限不能大于上限')).toBeInTheDocument()
+  expect(onSubmit).toHaveBeenCalledTimes(1)
+
+  await userEvent.clear(screen.getByLabelText('我方下限（USDG，可选）'))
+  await userEvent.type(screen.getByLabelText('目标最小买入（USDG，可选）'), '100')
+  await userEvent.type(screen.getByLabelText('目标最大买入（USDG，可选）'), '1')
+  await userEvent.click(screen.getByRole('button', { name: '创建' }))
+  expect(await screen.findByText('目标最大买入不能小于最小买入')).toBeInTheDocument()
+
+  await userEvent.clear(screen.getByLabelText('目标最大买入（USDG，可选）'))
+  await userEvent.click(screen.getByRole('button', { name: '创建' }))
+  expect(onSubmit).toHaveBeenLastCalledWith({ ...defaultStrategy, size_mode: 'ratio', size_value: '100', ratio_min: '', max_per_trade: '20', target_min: '100', target_max: '' })
+})
+
+it('switching mode resets the buy fields to that mode defaults and back', async () => {
+  render(<StrategyForm defaultValues={defaultStrategy} submitText="创建" onSubmit={vi.fn()} />)
+  await userEvent.selectOptions(screen.getByLabelText('买入模式'), 'ratio')
+  await userEvent.clear(screen.getByLabelText('我方上限（USDG，必填）'))
+  await userEvent.type(screen.getByLabelText('我方上限（USDG，必填）'), '77')
   await userEvent.selectOptions(screen.getByLabelText('买入模式'), 'fixed')
   expect(screen.getByLabelText('固定金额（USDG）')).toHaveValue('10')
+  await userEvent.selectOptions(screen.getByLabelText('买入模式'), 'ratio')
+  expect(screen.getByLabelText('我方上限（USDG，必填）')).toHaveValue('20')
+})
+
+it('submitDisabled disables the submit button', () => {
+  render(<StrategyForm defaultValues={defaultStrategy} submitText="创建" onSubmit={vi.fn()} submitDisabled />)
+  expect(screen.getByRole('button', { name: '创建' })).toBeDisabled()
 })
