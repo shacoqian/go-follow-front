@@ -49,7 +49,7 @@ function renderPage() {
       <MemoryRouter initialEntries={['/tasks']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/tasks" element={<TasksPage />} />
-          <Route path="/tasks/new" element={<div>向导页</div>} />
+          <Route path="/tasks/new" element={<div>新建页</div>} />
           <Route path="/tasks/:id/edit" element={<div>编辑页</div>} />
           <Route path="/positions" element={<div>仓位页</div>} />
         </Routes>
@@ -79,7 +79,7 @@ it('lists tasks with target/wallet labels, status badges, progress and mode summ
   expect(screen.getByText('比例 10%（5–50 USDG） · 目标 ≥1 USDG · 按比例卖')).toBeInTheDocument()
 })
 
-it('stops, enables, navigates to edit and to the wizard', async () => {
+it('stops, enables, navigates to edit and to the new-task page', async () => {
   vi.mocked(tasksApi.disable).mockResolvedValue(undefined)
   renderPage()
   const row = (await screen.findByText('大户A')).closest('tr')!

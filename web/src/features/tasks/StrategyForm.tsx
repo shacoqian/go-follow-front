@@ -52,7 +52,7 @@ export function StrategyForm({
   onSubmit(values: StrategyValues): void
 }) {
   const form = useForm<StrategyValues>({ resolver: zodResolver(strategySchema), defaultValues })
-  const { register, control, watch, setValue } = form
+  const { register, control, watch, setValue, clearErrors } = form
   const { errors } = form.formState
   const sizeMode = watch('size_mode')
   const tpEnabled = watch('tp_enabled')
@@ -75,6 +75,9 @@ export function StrategyForm({
                 } else {
                   setValue('size_value', FIXED_DEFAULTS.size_value, { shouldValidate: false })
                 }
+                // 重置到该模式的默认值后，上一模式留下的报错（比如固定金额清空触发的"金额格式不正确"）
+                // 已经不对应任何输入了，不清掉会一直挂在页面上误导用户。
+                clearErrors(['size_value', 'ratio_min', 'max_per_trade'])
               },
             })}
           />

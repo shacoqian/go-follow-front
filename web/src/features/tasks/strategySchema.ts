@@ -85,14 +85,14 @@ export const strategySchema = z
         ctx.addIssue({ code: 'custom', path: ['size_value'], message: '金额格式不正确' })
       }
     } else {
-      if (!/^\d+(\.\d+)?$/.test(v.size_value)) {
+      if (!/^\d+(\.\d{1,2})?$/.test(v.size_value)) {
         ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例格式不正确' })
       } else {
-        const bps = pctToBps(Number(v.size_value))
-        if (bps < 1) {
-          ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例必须大于 0' })
-        } else if (BigInt(Math.round(Number(v.size_value) * 100)) > MAX_INT64) {
+        const n = Number(v.size_value)
+        if (!Number.isFinite(n) || BigInt(Math.round(n * 100)) > MAX_INT64) {
           ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例过大' })
+        } else if (pctToBps(n) < 1) {
+          ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例必须大于 0' })
         }
       }
 
@@ -247,8 +247,11 @@ export function fromBackend(t: TaskInput): StrategyValues {
 }
 
 export function ratioSummary(t: TaskInput): string {
+  const min = t.ratio_min_usdg !== '0' ? unitsToUsdg(t.ratio_min_usdg) : ''
+  // 后端 max_per_trade_usdg = 0 表示无上限（迁移前的旧数据不会出现，界面在按比例模式下仍要求填写上限）。
+  if (t.max_per_trade_usdg === '0') return min ? `（${min} USDG 起，无上限）` : '（无上限）'
   const max = unitsToUsdg(t.max_per_trade_usdg)
-  return t.ratio_min_usdg !== '0' ? `（${unitsToUsdg(t.ratio_min_usdg)}–${max} USDG）` : `（≤${max} USDG）`
+  return min ? `（${min}–${max} USDG）` : `（≤${max} USDG）`
 }
 
 export function targetFilterSummary(t: TaskInput): string {

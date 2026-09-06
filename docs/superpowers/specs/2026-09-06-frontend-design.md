@@ -26,7 +26,7 @@ go-follow-front/
         auth/             登录页、会话 store、signAction
         wallets/          钱包池页、创建/导出/删除/提现对话框
         targets/          目标地址页
-        tasks/            任务列表、三步向导、策略表单（zod schema）
+        tasks/            任务列表、三步向导（已由计划 D 的单页 TaskBasicsCard + TaskFormPage 取代，见文末修订）、策略表单（zod schema）
         positions/        仓位页、手动卖出、决策列表、信号列表
         admin/            总览、用户、全站数据、审计
       app/                应用壳（左侧导航、顶部横幅、路由表、守卫）
@@ -89,7 +89,7 @@ go-follow-front/
 
 ## 8. 跟单任务
 
-### 8.1 三步向导（新建）
+### 8.1 三步向导（新建）（已由计划 D 的单页 TaskBasicsCard + TaskFormPage 取代，见文末修订）
 1. 选目标：下拉 + “新增目标”内联表单。
 2. 选钱包：只列 `status=active` 的钱包，显示余额。
 3. 策略表单（§8.2）→ `POST /api/tasks`。
@@ -202,5 +202,5 @@ zod schema 一处定义，同时导出表单类型与提交换算。界面单位
 - 原三步向导删除，改为 `TaskBasicsCard`（目标/钱包选择 + 新增目标/创建钱包）+ `TaskFormPage`（单页新建，`/tasks/new`）；编辑页 `TaskEditPage` 复用同一组件，基本信息只读。
 - `TaskBasicsCard` 在下拉列表重取完成前，为刚创建的目标/钱包补一个“占位”选项（用 `onCreated`/`onSaved` 返回的 `id`/`address` 构造），避免用户选中后列表重取期间下拉找不到该项而回退为未选中；列表重取到位后占位选项被真实数据替换。
 - 固定模式下编辑回读：无论后端存的 `max_per_trade_usdg` 是什么值，界面一律不展示、也不使用该值，而是回填一个可用的默认上限（避免用户切回按比例模式时立刻被“必须大于 0”卡住）；提交固定模式时该字段恒为 `"0"`。
-- 旧的按比例任务如果 `max_per_trade_usdg` 存量为 `0`（早于本次改动创建），编辑页回读会要求用户补填我方上限后才能保存，校验文案「我方上限必须大于 0」。
+- 后端 `max_per_trade_usdg = 0` 表示无上限（迁移前的 API 不允许为 0，实际不会出现）；界面在按比例模式下仍要求填写上限。
 - 任务列表摘要（`TaskRow.summaryText`）改为复用 `strategySchema` 导出的 `ratioSummary(t)`/`targetFilterSummary(t)`：固定 `固定 10 USDG`；按比例 `比例 10%（5–50 USDG）`（无下限时 `比例 10%（≤50 USDG）`）；目标过滤追加 ` · 目标 ≥1 USDG` / ` · 目标 ≤100 USDG` / ` · 目标 1–100 USDG`；再接 ` · <卖出模式文案>`，止盈止损任一项开启时追加 ` · 止盈止损`。

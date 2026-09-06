@@ -104,6 +104,19 @@ it('switching mode resets the buy fields to that mode defaults and back', async 
   expect(screen.getByLabelText('我方上限（USDG，必填）')).toHaveValue('20')
 })
 
+it('clears the stale size_value error when switching modes', async () => {
+  const onSubmit = vi.fn()
+  render(<StrategyForm defaultValues={defaultStrategy} submitText="创建" onSubmit={onSubmit} />)
+
+  await userEvent.clear(screen.getByLabelText('固定金额（USDG）'))
+  await userEvent.click(screen.getByRole('button', { name: '创建' }))
+  expect(await screen.findByText('金额必须大于 0')).toBeInTheDocument()
+  expect(onSubmit).not.toHaveBeenCalled()
+
+  await userEvent.selectOptions(screen.getByLabelText('买入模式'), 'ratio')
+  expect(screen.queryByText('金额必须大于 0')).not.toBeInTheDocument()
+})
+
 it('submitDisabled disables the submit button', () => {
   render(<StrategyForm defaultValues={defaultStrategy} submitText="创建" onSubmit={vi.fn()} submitDisabled />)
   expect(screen.getByRole('button', { name: '创建' })).toBeDisabled()

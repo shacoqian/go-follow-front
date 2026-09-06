@@ -68,9 +68,12 @@ export function TaskBasicsCard({
     targetList.map((t) => ({ value: String(t.id), label: displayName(t) })),
     targetList.some((t) => t.id === pendingTarget?.id) ? null : pendingTarget,
   )
+  // pending 是否已"落地"要看下拉实际展示的（active-only）列表，用未过滤的全量列表判断
+  // 会在新钱包被停用之前误判为已落地，导致占位选项被过早撤掉。
+  const activeWallets = walletList.filter((w) => w.status === 'active')
   const walletOptions = optionsWith(
-    walletList.filter((w) => w.status === 'active').map((w) => ({ value: String(w.id), label: displayName(w) })),
-    walletList.some((w) => w.id === pendingWallet?.id) ? null : pendingWallet,
+    activeWallets.map((w) => ({ value: String(w.id), label: displayName(w) })),
+    activeWallets.some((w) => w.id === pendingWallet?.id) ? null : pendingWallet,
   )
 
   return (

@@ -36,11 +36,27 @@ it('ratio validation: bounds required/ordered, bps range', () => {
   expect(strategySchema.safeParse({ ...r, max_per_trade: '' }).error?.issues[0].message).toBe('我方上限必须大于 0')
   expect(strategySchema.safeParse({ ...r, max_per_trade: '0' }).error?.issues[0].message).toBe('我方上限必须大于 0')
   expect(strategySchema.safeParse({ ...r, ratio_min: '30' }).error?.issues[0].message).toBe('我方下限不能大于上限')
-  expect(strategySchema.safeParse({ ...r, size_value: '0.001' }).error?.issues[0].message).toBe('比例必须大于 0')
+  // 两位小数是能表示的最小非零比例增量（1 bps = 0.01%），故用 '0' 触发"必须大于 0"；
+  // 三位小数已经不满足格式（见下面的两位小数用例），不会再落到这条分支。
+  expect(strategySchema.safeParse({ ...r, size_value: '0' }).error?.issues[0].message).toBe('比例必须大于 0')
   expect(strategySchema.safeParse({ ...r, size_value: '0x10' }).error?.issues[0].message).toBe('比例格式不正确')
   expect(strategySchema.safeParse({ ...r, size_value: '1e17' }).error?.issues[0].message).toBe('比例格式不正确')
   expect(strategySchema.safeParse({ ...r, size_value: '99999999999999999999' }).error?.issues[0].message).toBe('比例过大')
   expect(strategySchema.safeParse({ ...r, size_value: '250' }).success).toBe(true)
+})
+
+it('ratio format allows at most two decimals', () => {
+  const r = { ...defaultStrategy, size_mode: 'ratio' as const, size_value: '10', ratio_min: '', max_per_trade: '20' }
+  expect(strategySchema.safeParse({ ...r, size_value: '1.005' }).error?.issues[0].message).toBe('比例格式不正确')
+  expect(strategySchema.safeParse({ ...r, size_value: '1.05' }).success).toBe(true)
+  expect(strategySchema.safeParse({ ...r, size_value: '10' }).success).toBe(true)
+})
+
+it('an absurdly large ratio value is rejected as too large, not thrown', () => {
+  const r = { ...defaultStrategy, size_mode: 'ratio' as const, size_value: '10', ratio_min: '', max_per_trade: '20' }
+  const huge = '9'.repeat(400)
+  expect(() => strategySchema.safeParse({ ...r, size_value: huge })).not.toThrow()
+  expect(strategySchema.safeParse({ ...r, size_value: huge }).error?.issues[0].message).toBe('比例过大')
 })
 
 it('fixed validation', () => {
@@ -69,6 +85,9 @@ it('summaries', () => {
   const b = toBackend({ ...defaultStrategy, size_mode: 'ratio', size_value: '10', ratio_min: '5', max_per_trade: '50' }, ids)
   expect(ratioSummary(b)).toBe('（5–50 USDG）')
   expect(ratioSummary({ ...b, ratio_min_usdg: '0' })).toBe('（≤50 USDG）')
+  // 后端 max_per_trade_usdg = 0 表示无上限，不是"上限为 0"。
+  expect(ratioSummary({ ...b, ratio_min_usdg: '0', max_per_trade_usdg: '0' })).toBe('（无上限）')
+  expect(ratioSummary({ ...b, ratio_min_usdg: '5000000', max_per_trade_usdg: '0' })).toBe('（5 USDG 起，无上限）')
   expect(targetFilterSummary(b)).toBe('')
   expect(targetFilterSummary({ ...b, min_target_trade_usdg: '1000000' })).toBe(' · 目标 ≥1 USDG')
   expect(targetFilterSummary({ ...b, max_target_trade_usdg: '100000000' })).toBe(' · 目标 ≤100 USDG')
