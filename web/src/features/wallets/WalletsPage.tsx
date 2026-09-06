@@ -8,6 +8,8 @@ import { useWallets, useInvalidateWallets } from './useWallets'
 import { WalletRow } from './WalletRow'
 import { CreateWalletDialog } from './CreateWalletDialog'
 import { EditWalletDialog } from './EditWalletDialog'
+import { ExportDialog } from './ExportDialog'
+import { DeleteWalletDialog } from './DeleteWalletDialog'
 
 type DialogState =
   | { kind: 'create' }
@@ -74,8 +76,17 @@ export default function WalletsPage() {
           onConfirm={() => disableWallet.mutate(dialog.wallet.id)}
         />
       )}
-      {dialog?.kind === 'export' && null}
-      {dialog?.kind === 'delete' && null}
+      {dialog?.kind === 'export' && (
+        <ExportDialog open wallet={dialog.wallet} onOpenChange={(o) => !o && setDialog(null)} />
+      )}
+      {dialog?.kind === 'delete' && (
+        <DeleteWalletDialog
+          open
+          wallet={dialog.wallet}
+          onOpenChange={(o) => !o && setDialog(null)}
+          onDeleted={invalidate}
+        />
+      )}
       {dialog?.kind === 'withdraw' && null}
       {dialog?.kind === 'history' && null}
     </div>
