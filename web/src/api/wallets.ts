@@ -52,7 +52,7 @@ export const walletsApi = {
       undefined,
     ),
   withdraw: (id: number, body: { asset: 'USDG' | 'ETH'; amount: string }): Promise<Reply<WithdrawResult>> =>
-    requestFull<WithdrawResult>('POST', `/wallets/${id}/withdraw`, body),
+    requestFull<WithdrawResult>('POST', `/wallets/${id}/withdraw`, body, { timeoutMs: 90_000 }),
   withdrawals: (id: number) => request<Withdrawal[]>('GET', `/wallets/${id}/withdrawals`, undefined),
 }
 

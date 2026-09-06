@@ -36,7 +36,7 @@ it('wallets routes', async () => {
 it('withdraw uses requestFull so 202 survives', async () => {
   reqFull.mockResolvedValue({ status: 202, data: { id: 1, tx_hash: '0x', status: 'SENT', note: 'n' } })
   const r = await walletsApi.withdraw(3, { asset: 'USDG', amount: 'all' })
-  expect(reqFull).toHaveBeenCalledWith('POST', '/wallets/3/withdraw', { asset: 'USDG', amount: 'all' })
+  expect(reqFull).toHaveBeenCalledWith('POST', '/wallets/3/withdraw', { asset: 'USDG', amount: 'all' }, { timeoutMs: 90_000 })
   expect(r.status).toBe(202)
 })
 

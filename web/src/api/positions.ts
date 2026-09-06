@@ -26,5 +26,6 @@ export interface SellResult {
 
 export const positionsApi = {
   byTask: (taskId: number) => request<Position[]>('GET', `/tasks/${taskId}/positions`, undefined),
-  sell: (id: number, pctBps: number) => request<SellResult>('POST', `/positions/${id}/sell`, { pct_bps: pctBps }),
+  sell: (id: number, pctBps: number) =>
+    request<SellResult>('POST', `/positions/${id}/sell`, { pct_bps: pctBps }, { timeoutMs: 90_000 }),
 }

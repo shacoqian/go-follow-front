@@ -14,6 +14,7 @@ it('positions / sell', async () => {
     ['GET', '/tasks/3/positions', undefined],
     ['POST', '/positions/9/sell', { pct_bps: 5000 }],
   ])
+  expect(req.mock.calls[1][3]).toEqual({ timeoutMs: 90_000 })
 })
 
 it('decisions / signals build query strings with only present params', async () => {
