@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { Dialog } from '@/components/ui/dialog'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -20,20 +21,18 @@ export function EditWalletDialog({
 }) {
   const [label, setLabel] = useState(wallet.label)
   const [note, setNote] = useState(wallet.note)
-  const [busy, setBusy] = useState(false)
-
-  async function onSubmit() {
-    setBusy(true)
-    try {
-      await walletsApi.update(wallet.id, { label, note })
+  // 走全局 mutationCache：失败自动 toast（401 除外），这里不重复弹。
+  const m = useMutation({
+    mutationFn: (body: { label: string; note: string }) => walletsApi.update(wallet.id, body),
+    onSuccess: () => {
       onSaved()
       toast.success('已保存')
       onOpenChange(false)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '保存失败')
-    } finally {
-      setBusy(false)
-    }
+    },
+  })
+
+  function onSubmit() {
+    m.mutate({ label, note })
   }
 
   return (
@@ -46,7 +45,7 @@ export function EditWalletDialog({
           <Textarea id="edit-wallet-note" value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
         <div className="flex justify-end">
-          <Button onClick={onSubmit} disabled={busy}>
+          <Button onClick={onSubmit} disabled={m.isPending}>
             保存
           </Button>
         </div>

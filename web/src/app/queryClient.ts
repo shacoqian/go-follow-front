@@ -12,7 +12,8 @@ export function makeQueryClient(): QueryClient {
   return new QueryClient({
     // meta.silent 的查询（如 /health 轮询）失败不弹。
     queryCache: new QueryCache({ onError: (err, query) => { if (!query.meta?.silent) report(err) } }),
-    mutationCache: new MutationCache({ onError: report }),
+    // meta.silent 的变更（对话框自己内联展示错误时）失败不弹，规则与 queryCache 对齐。
+    mutationCache: new MutationCache({ onError: (err, _vars, _ctx, mutation) => { if (!mutation.meta?.silent) report(err) } }),
     defaultOptions: { queries: { retry: false, refetchOnWindowFocus: true, staleTime: 5_000 } },
   })
 }

@@ -1,8 +1,8 @@
 import { useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Table } from '@/components/ui/table'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { toast } from '@/components/ui/toast'
 import { walletsApi, type Wallet } from '@/api/wallets'
 import { useWallets, useInvalidateWallets } from './useWallets'
 import { WalletRow } from './WalletRow'
@@ -18,21 +18,15 @@ export default function WalletsPage() {
   const { data, isLoading, isError } = useWallets()
   const invalidate = useInvalidateWallets()
   const [dialog, setDialog] = useState<DialogState>(null)
-  const [disabling, setDisabling] = useState(false)
-
-  async function onConfirmDisable() {
-    if (!dialog || dialog.kind !== 'disable') return
-    setDisabling(true)
-    try {
-      await walletsApi.disable(dialog.wallet.id)
-      await invalidate()
+  // 走全局 mutationCache：失败自动 toast（401 除外），这里不重复弹。
+  const disableWallet = useMutation({
+    // 包一层调用：react-query 会给 mutationFn 传第二个 context 参数，直接透传会污染 walletsApi.disable 收到的实参。
+    mutationFn: (id: number) => walletsApi.disable(id),
+    onSuccess: () => {
+      invalidate()
       setDialog(null)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '操作失败')
-    } finally {
-      setDisabling(false)
-    }
-  }
+    },
+  })
 
   return (
     <div>
@@ -76,8 +70,8 @@ export default function WalletsPage() {
           title="禁用钱包"
           description="禁用后该钱包不再参与跟单，已有任务保持原样。"
           confirmText="确认禁用"
-          busy={disabling}
-          onConfirm={onConfirmDisable}
+          busy={disableWallet.isPending}
+          onConfirm={() => disableWallet.mutate(dialog.wallet.id)}
         />
       )}
       {dialog?.kind === 'export' && null}
