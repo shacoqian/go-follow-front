@@ -69,16 +69,28 @@ export const strategySchema = z
       } catch {
         ctx.addIssue({ code: 'custom', path: ['size_value'], message: '金额格式不正确' })
       }
+    } else if (!/^\d+(\.\d+)?$/.test(v.size_value)) {
+      ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例格式不正确' })
     } else {
-      const n = Number(v.size_value)
-      if (!Number.isFinite(n) || v.size_value.trim() === '') ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例格式不正确' })
-      else if (n <= 0) ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例必须大于 0' })
-      else if (n > 100) ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例不能超过 100' })
+      const bps = pctToBps(Number(v.size_value))
+      if (bps < 1) ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例必须大于 0' })
+      else if (bps > 10000) ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例不能超过 100' })
     }
     try {
       if (usdgToUnits(v.max_per_trade) === '0') ctx.addIssue({ code: 'custom', path: ['max_per_trade'], message: '单笔上限必须大于 0' })
     } catch {
       /* amount 校验已报 */
+    }
+    if (pctToBps(v.stop_loss_pct) >= 10000) {
+      ctx.addIssue({ code: 'custom', path: ['stop_loss_pct'], message: '止损比例须小于 100' })
+    }
+    const slippageBps = pctToBps(v.slippage_pct)
+    if (slippageBps < 1 || slippageBps > 9999) {
+      ctx.addIssue({ code: 'custom', path: ['slippage_pct'], message: '滑点须在 0–100 之间' })
+    }
+    const tpSellBps = pctToBps(v.take_profit_sell_pct)
+    if (tpSellBps < 1 || tpSellBps > 10000) {
+      ctx.addIssue({ code: 'custom', path: ['take_profit_sell_pct'], message: '止盈卖出比例须在 0.01–100' })
     }
     parseBlacklist(v.token_blacklist).forEach((a, i) => {
       if (!isAddress(a)) ctx.addIssue({ code: 'custom', path: ['token_blacklist'], message: `黑名单第 ${i + 1} 行不是合法地址` })

@@ -37,6 +37,16 @@ it('rejects invalid inputs with Chinese messages', () => {
   expect(strategySchema.safeParse({ ...defaultStrategy, token_blacklist: 'nope' }).error?.issues[0].message).toBe('黑名单第 1 行不是合法地址')
 })
 
+it('checks percent-to-bps rounding edge cases', () => {
+  expect(strategySchema.safeParse({ ...defaultStrategy, stop_loss_pct: 99.999 }).error?.issues[0].message).toBe('止损比例须小于 100')
+  expect(strategySchema.safeParse({ ...defaultStrategy, slippage_pct: 0.001 }).error?.issues[0].message).toBe('滑点须在 0–100 之间')
+  expect(strategySchema.safeParse({ ...defaultStrategy, slippage_pct: 99.999 }).error?.issues[0].message).toBe('滑点须在 0–100 之间')
+  expect(strategySchema.safeParse({ ...defaultStrategy, size_mode: 'ratio' as const, size_value: '0x10' }).error?.issues[0].message).toBe('比例格式不正确')
+  expect(strategySchema.safeParse({ ...defaultStrategy, size_mode: 'ratio' as const, size_value: '1e2' }).error?.issues[0].message).toBe('比例格式不正确')
+  expect(strategySchema.safeParse({ ...defaultStrategy, size_mode: 'ratio' as const, size_value: '0.001' }).error?.issues[0].message).toBe('比例必须大于 0')
+  expect(strategySchema.safeParse({ ...defaultStrategy, stop_loss_pct: 99.99 }).success).toBe(true)
+})
+
 it('round-trips through the backend shape', () => {
   const v = { ...defaultStrategy, size_mode: 'ratio' as const, size_value: '7.5', tp_enabled: true, take_profit_pct: 25, take_profit_sell_pct: 40, stop_loss_pct: 10, max_hold_min: 30, token_blacklist: '0x1111111111111111111111111111111111111111' }
   expect(fromBackend(toBackend(v, ids))).toEqual(v)
