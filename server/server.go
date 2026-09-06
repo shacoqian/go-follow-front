@@ -22,7 +22,12 @@ type Config struct {
 // New 返回完整的 HTTP handler：/api/* → 反代；其余 → 静态文件或 index.html。
 func New(cfg Config) http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("/api/", newProxy(cfg.Backend))
+	p := newProxy(cfg.Backend)
+	// 同时注册精确路径 "/api"：ServeMux 会把裸的 "/api" 请求 301 到 "/api/"（且把
+	// POST 改写成 GET），导致 Rewrite 里 trimmed=="" 分支永远走不到；显式注册
+	// "/api" 才能让 "/api" 单独请求也直接进反代，满足「/api 单独请求 → /」。
+	mux.Handle("/api", p)
+	mux.Handle("/api/", p)
 	mux.Handle("/", newSPA(cfg.Assets))
 	return mux
 }

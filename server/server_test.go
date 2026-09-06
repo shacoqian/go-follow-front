@@ -108,3 +108,22 @@ func TestDirectoryPathFallsBackToIndex(t *testing.T) {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
 }
+
+func TestProxyBareApiPath(t *testing.T) {
+	var gotPath string
+	h, _ := newTestHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.RequestURI()
+		w.WriteHeader(200)
+		_, _ = io.WriteString(w, "ok")
+	}))
+	w := get(t, h, "/api?x=1", nil)
+	if w.Code == http.StatusMovedPermanently {
+		t.Fatalf("bare /api should not redirect, got %d", w.Code)
+	}
+	if gotPath != "/?x=1" {
+		t.Fatalf("path=%q", gotPath)
+	}
+	if w.Body.String() != "ok" {
+		t.Fatalf("body=%s", w.Body.String())
+	}
+}
