@@ -60,8 +60,8 @@ it('round-trips through the backend shape', () => {
     tp_enabled: true, take_profit_pct: 25, take_profit_sell_pct: 40, stop_loss_pct: 10, max_hold_min: 1.5, token_blacklist: '0x1111111111111111111111111111111111111111' }
   expect(fromBackend(toBackend(v, ids))).toEqual(v)
   expect(fromBackend(toBackend(defaultStrategy, ids))).toEqual({ ...defaultStrategy, take_profit_sell_pct: 50 })
-  // 旧行：fixed 但带非零 max_per_trade（旧封顶值）→ 回读为 fixed，界面不显示也不带回该值
-  const legacy = { ...toBackend(defaultStrategy, ids), max_per_trade_usdg: '20000000' }
+  // 旧行：fixed 但带非零 max_per_trade（旧封顶值，35 与默认值 20 不同，确保不是巧合读回）→ 回读为 fixed，界面不显示也不带回该值，恒显示默认上限
+  const legacy = { ...toBackend(defaultStrategy, ids), max_per_trade_usdg: '35000000' }
   expect(fromBackend(legacy).max_per_trade).toBe('20')
 })
 
