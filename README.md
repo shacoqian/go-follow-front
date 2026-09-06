@@ -84,11 +84,12 @@ cp .env.example .env   # 按需改 LISTEN / GOFOLLOW_URL
 npm install
 ```
 
-然后运行：
+然后运行——为了不让私钥留在 shell 历史里，先把它写进一个已加入 `.gitignore` 的本地文件，再用 `.` 把它加载进环境变量：
 
 ```bash
-SMOKE_KEY=0x$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))") \
-BASE=http://127.0.0.1:8080/api \
+node -e "console.log('SMOKE_KEY=0x' + require('crypto').randomBytes(32).toString('hex'))" > scripts/.smoke.env
+echo "BASE=http://127.0.0.1:8080/api" >> scripts/.smoke.env
+set -a; . scripts/.smoke.env; set +a
 node scripts/smoke.mjs
 ```
 

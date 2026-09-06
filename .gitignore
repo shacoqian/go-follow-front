@@ -3,6 +3,7 @@ web/dist/
 bin/
 logs/
 .env
+scripts/.smoke.env
 *.pid
 .superpowers/
 .worktrees/
