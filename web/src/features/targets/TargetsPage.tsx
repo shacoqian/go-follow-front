@@ -5,6 +5,7 @@ import { Table, Tr, Td } from '@/components/ui/table'
 import { CopyButton } from '@/components/CopyButton'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { shortAddress } from '@/lib/format'
+import { addressUrl } from '@/lib/explorer'
 import { targetsApi, type Target } from '@/api/targets'
 import { tasksApi } from '@/api/tasks'
 import { useTargets, useInvalidateTargets } from './useTargets'
@@ -67,7 +68,14 @@ export default function TargetsPage() {
             {(data ?? []).map((t) => (
               <Tr key={t.id}>
                 <Td>
-                  <span className="font-mono">{shortAddress(t.address)}</span> <CopyButton text={t.address} />
+                  {addressUrl(t.address) ? (
+                    <a className="font-mono underline" href={addressUrl(t.address)!} target="_blank" rel="noreferrer">
+                      {shortAddress(t.address)}
+                    </a>
+                  ) : (
+                    <span className="font-mono">{shortAddress(t.address)}</span>
+                  )}{' '}
+                  <CopyButton text={t.address} />
                 </Td>
                 <Td>{t.label}</Td>
                 <Td>{t.note}</Td>

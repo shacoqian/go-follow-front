@@ -9,6 +9,7 @@ vi.mock('@/api/wallets', () => ({
 }))
 vi.mock('@/api/targets', () => ({ targetsApi: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() } }))
 vi.mock('@/api/tasks', () => ({ tasksApi: { list: vi.fn() } }))
+vi.mock('@/api/positions', () => ({ positionsApi: { byTask: vi.fn(), sell: vi.fn() } }))
 vi.mock('@/wallets/okx', () => ({
   waitForOkx: vi.fn(async () => true),
   isOkxInstalled: vi.fn(() => true),

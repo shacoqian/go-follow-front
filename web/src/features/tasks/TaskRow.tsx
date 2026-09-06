@@ -100,7 +100,7 @@ export function TaskRow({
           <Button size="sm" variant="ghost" className="text-red-600" onClick={onDelete}>
             删除
           </Button>
-          <Link to="/positions" className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }))}>
+          <Link to={`/positions?task=${t.id}`} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }))}>
             仓位
           </Link>
         </div>

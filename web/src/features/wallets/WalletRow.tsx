@@ -1,6 +1,7 @@
 import type { Wallet } from '@/api/wallets'
 import { unitsToUsdg, weiToEth } from '@/lib/amount'
 import { shortAddress } from '@/lib/format'
+import { addressUrl } from '@/lib/explorer'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tr, Td } from '@/components/ui/table'
@@ -24,6 +25,7 @@ export function WalletRow({
   onHistory(): void
 }) {
   const bal = (v: string | null, f: (x: string | null) => string) => (w.balance_error ? '读取失败' : f(v))
+  const url = addressUrl(w.address)
   return (
     <Tr>
       <Td>
@@ -31,7 +33,14 @@ export function WalletRow({
         {w.note && <div className="text-xs text-slate-500">{w.note}</div>}
       </Td>
       <Td>
-        <span className="font-mono">{shortAddress(w.address)}</span> <CopyButton text={w.address} />
+        {url ? (
+          <a className="font-mono underline" href={url} target="_blank" rel="noreferrer">
+            {shortAddress(w.address)}
+          </a>
+        ) : (
+          <span className="font-mono">{shortAddress(w.address)}</span>
+        )}{' '}
+        <CopyButton text={w.address} />
       </Td>
       <Td>{bal(w.usdg_balance, unitsToUsdg)}</Td>
       <Td>{bal(w.eth_balance, weiToEth)}</Td>

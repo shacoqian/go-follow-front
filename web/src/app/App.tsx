@@ -6,6 +6,7 @@ import TargetsPage from '@/features/targets/TargetsPage'
 import TasksPage from '@/features/tasks/TasksPage'
 import TaskFormPage from '@/features/tasks/TaskFormPage'
 import TaskEditPage from '@/features/tasks/TaskEditPage'
+import PositionsPage from '@/features/positions/PositionsPage'
 import { Toaster } from '@/components/ui/toast'
 import Placeholder from './Placeholder'
 import RequireAdmin from './RequireAdmin'
@@ -25,7 +26,7 @@ export function AppRoutes() {
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/tasks/new" element={<TaskFormPage />} />
           <Route path="/tasks/:id/edit" element={<TaskEditPage />} />
-          <Route path="/positions" element={<Placeholder title="仓位" />} />
+          <Route path="/positions" element={<PositionsPage />} />
           <Route path="/decisions" element={<Placeholder title="决策" />} />
           <Route path="/signals" element={<Placeholder title="信号" />} />
           <Route element={<RequireAdmin />}>
