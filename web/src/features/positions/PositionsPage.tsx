@@ -8,9 +8,9 @@ import { positionsApi, type Position } from '@/api/positions'
 import { useTasks, taskKeys } from '@/features/tasks/useTasks'
 import { useTargets } from '@/features/targets/useTargets'
 import { useWallets } from '@/features/wallets/useWallets'
-import { shortAddress } from '@/lib/format'
 import { PositionRow } from './PositionRow'
 import { SellDialog } from './SellDialog'
+import { taskOptions as buildTaskOptions } from './taskLabel'
 
 export default function PositionsPage() {
   const [params, setParams] = useSearchParams()
@@ -31,13 +31,7 @@ export default function PositionsPage() {
     meta: { silent: true },
   })
 
-  const taskOptions = (tasks ?? []).map((t) => {
-    const target = targets?.find((x) => x.id === t.target_id)
-    const wallet = wallets?.find((x) => x.id === t.wallet_id)
-    const targetLabel = target ? target.label || shortAddress(target.address) : `#${t.target_id}`
-    const walletLabel = wallet ? wallet.label || shortAddress(wallet.address) : `#${t.wallet_id}`
-    return { value: String(t.id), label: `${targetLabel} · ${walletLabel}` }
-  })
+  const taskOptions = buildTaskOptions(tasks, targets, wallets)
   // 任务列表还没取回来时先补一个占位选项，避免受控 select 因为找不到匹配的 option 而把选中态回退成空。
   if (taskId != null && !taskOptions.some((o) => o.value === String(taskId))) {
     taskOptions.unshift({ value: String(taskId), label: `#${taskId}` })
