@@ -194,3 +194,13 @@ zod schema 一处定义，同时导出表单类型与提交换算。界面单位
 | | 目标最大买入（USDG，可选） | `max_target_trade_usdg` | ×10^6；空 = 0；两者都填时 min ≤ max |
 
 默认值：固定 10 USDG；按比例默认 10%、下限空、上限 20；目标过滤两项空。任务列表摘要：固定 `固定 10 USDG`；按比例 `比例 10%（下限–上限 USDG）`；目标过滤有值时追加 `目标 ≥/≤ …`。
+
+## 实现修订（2026-09-06，计划 D）
+
+- `CreateWalletDialog.onCreated` 与 `TargetDialog.onSaved` 改为带结果参数：`onCreated(result: { id: number; address: string }): void`；`onSaved(result?: { id: number; address: string }): void`（`TargetDialog` 编辑已有目标时不新增选项，调用 `onSaved()` 不带参数）。调用方据此把新建的钱包/目标直接选中，无需等待列表重新拉取。
+- `StrategyForm` 新增可选 prop `submitDisabled`：基本信息（目标/钱包）未选时由外层置 `true`，与内部 `busy` 一起禁用提交按钮。
+- 原三步向导删除，改为 `TaskBasicsCard`（目标/钱包选择 + 新增目标/创建钱包）+ `TaskFormPage`（单页新建，`/tasks/new`）；编辑页 `TaskEditPage` 复用同一组件，基本信息只读。
+- `TaskBasicsCard` 在下拉列表重取完成前，为刚创建的目标/钱包补一个“占位”选项（用 `onCreated`/`onSaved` 返回的 `id`/`address` 构造），避免用户选中后列表重取期间下拉找不到该项而回退为未选中；列表重取到位后占位选项被真实数据替换。
+- 固定模式下编辑回读：无论后端存的 `max_per_trade_usdg` 是什么值，界面一律不展示、也不使用该值，而是回填一个可用的默认上限（避免用户切回按比例模式时立刻被“必须大于 0”卡住）；提交固定模式时该字段恒为 `"0"`。
+- 旧的按比例任务如果 `max_per_trade_usdg` 存量为 `0`（早于本次改动创建），编辑页回读会要求用户补填我方上限后才能保存，校验文案「我方上限必须大于 0」。
+- 任务列表摘要（`TaskRow.summaryText`）改为复用 `strategySchema` 导出的 `ratioSummary(t)`/`targetFilterSummary(t)`：固定 `固定 10 USDG`；按比例 `比例 10%（5–50 USDG）`（无下限时 `比例 10%（≤50 USDG）`）；目标过滤追加 ` · 目标 ≥1 USDG` / ` · 目标 ≤100 USDG` / ` · 目标 1–100 USDG`；再接 ` · <卖出模式文案>`，止盈止损任一项开启时追加 ` · 止盈止损`。

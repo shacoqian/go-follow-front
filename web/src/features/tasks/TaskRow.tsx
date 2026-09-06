@@ -8,6 +8,7 @@ import { Tr, Td } from '@/components/ui/table'
 import { bpsToPct, unitsToUsdg } from '@/lib/amount'
 import { shortAddress } from '@/lib/format'
 import { cn } from '@/lib/cn'
+import { ratioSummary, targetFilterSummary } from './strategySchema'
 
 const SELL_MODE_TEXT: Record<Task['sell_mode'], string> = {
   manual: '手动卖',
@@ -17,9 +18,11 @@ const SELL_MODE_TEXT: Record<Task['sell_mode'], string> = {
 
 function summaryText(t: Task): string {
   const size =
-    t.size_mode === 'fixed' ? `固定 ${unitsToUsdg(t.size_value)} USDG` : `比例 ${bpsToPct(Number(t.size_value))}%`
+    t.size_mode === 'fixed'
+      ? `固定 ${unitsToUsdg(t.size_value)} USDG`
+      : `比例 ${bpsToPct(Number(t.size_value))}%${ratioSummary(t)}`
   const tpOn = t.take_profit_bps > 0 || t.stop_loss_bps > 0 || t.max_hold_sec > 0
-  return `${size} · ${SELL_MODE_TEXT[t.sell_mode]}${tpOn ? ' · 止盈止损' : ''}`
+  return `${size}${targetFilterSummary(t)} · ${SELL_MODE_TEXT[t.sell_mode]}${tpOn ? ' · 止盈止损' : ''}`
 }
 
 export function TaskRow({

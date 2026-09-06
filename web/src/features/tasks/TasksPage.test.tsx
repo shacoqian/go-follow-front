@@ -22,6 +22,26 @@ const t1: Task = { ...base, id: 10, owner: '0xabc', enabled: true, spent_usdg: '
 // "大户A" 文本节点，让未 within 限定的 screen.findByText('大户A') 行定位报 "Found multiple elements"；
 // row2 的断言都不依赖目标列，这里只是避免数据碰撞，顺带覆盖"找不到显示 #target_id"的兜底分支）。
 const t2: Task = { ...base, id: 11, target_id: 3, owner: '0xabc', enabled: false, spent_usdg: '0', consecutive_failures: 0, paused_reason: 'admin', paused_at: null }
+// target_id 显式改为 4（不在 mock 目标列表中），避免与 t1 共用 target_id 2 撞出重复的
+// "大户A" 文本节点，干扰第一条用例里未 within 限定的 screen.findByText('大户A')。
+const t3: Task = {
+  ...base,
+  id: 12,
+  target_id: 4,
+  size_mode: 'ratio',
+  size_value: '1000',
+  ratio_min_usdg: '5000000',
+  max_per_trade_usdg: '50000000',
+  min_target_trade_usdg: '1000000',
+  max_target_trade_usdg: '0',
+  owner: '0xabc',
+  enabled: true,
+  spent_usdg: '5000000',
+  consecutive_failures: 0,
+  paused_reason: '',
+  paused_at: null,
+  spend_limit_usdg: '20000000',
+}
 
 function renderPage() {
   return render(
@@ -41,7 +61,7 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks()
   useToasts.setState({ items: [] })
-  vi.mocked(tasksApi.list).mockResolvedValue([t1, t2])
+  vi.mocked(tasksApi.list).mockResolvedValue([t1, t2, t3])
   vi.mocked(targetsApi.list).mockResolvedValue([{ id: 2, address: '0x2222222222222222222222222222222222222222', label: '大户A', note: '', created_at: '' }])
   vi.mocked(walletsApi.list).mockResolvedValue([{ id: 1, address: '0x1111111111111111111111111111111111111111', label: '主钱包', status: 'active', usdg_balance: '0', eth_balance: '0', task_count: 1, has_pending_withdrawal: false, note: '', created_at: '' }])
 })
@@ -56,6 +76,7 @@ it('lists tasks with target/wallet labels, status badges, progress and mode summ
   const row2 = screen.getByText('管理员禁用').closest('tr')!
   expect(within(row2).getByText('不限')).toBeInTheDocument()
   expect(within(row2).getByRole('button', { name: '启用' })).toBeDisabled()
+  expect(screen.getByText('比例 10%（5–50 USDG） · 目标 ≥1 USDG · 按比例卖')).toBeInTheDocument()
 })
 
 it('stops, enables, navigates to edit and to the wizard', async () => {
