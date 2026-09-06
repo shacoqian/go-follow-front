@@ -10,6 +10,8 @@ import { CreateWalletDialog } from './CreateWalletDialog'
 import { EditWalletDialog } from './EditWalletDialog'
 import { ExportDialog } from './ExportDialog'
 import { DeleteWalletDialog } from './DeleteWalletDialog'
+import { WithdrawDialog } from './WithdrawDialog'
+import { WithdrawalHistoryDialog } from './WithdrawalHistoryDialog'
 
 type DialogState =
   | { kind: 'create' }
@@ -87,8 +89,17 @@ export default function WalletsPage() {
           onDeleted={invalidate}
         />
       )}
-      {dialog?.kind === 'withdraw' && null}
-      {dialog?.kind === 'history' && null}
+      {dialog?.kind === 'withdraw' && (
+        <WithdrawDialog
+          open
+          wallet={dialog.wallet}
+          onOpenChange={(o) => !o && setDialog(null)}
+          onSubmitted={invalidate}
+        />
+      )}
+      {dialog?.kind === 'history' && (
+        <WithdrawalHistoryDialog open wallet={dialog.wallet} onOpenChange={(o) => !o && setDialog(null)} />
+      )}
     </div>
   )
 }
