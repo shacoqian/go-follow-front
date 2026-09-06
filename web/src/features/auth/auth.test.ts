@@ -11,9 +11,12 @@ vi.mock('@/wallets/okx', () => ({
 vi.mock('@/api/auth', () => ({
   authApi: { nonce: vi.fn(), verify: vi.fn(), logout: vi.fn(), me: vi.fn(), action: vi.fn() },
 }))
+vi.mock('@/components/ui/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }))
 
 import { queryClient } from '@/app/queryClient'
 import { authApi } from '@/api/auth'
+import { toast } from '@/components/ui/toast'
+import { shortAddress } from '@/lib/format'
 import * as okx from '@/wallets/okx'
 import { loginAs, loginWithOkx, logout, refreshMe, signAction, switchAccount, watchAccountChanges } from './auth'
 import { clearSession, sessionToken, useSession } from './session'
@@ -91,7 +94,30 @@ it('refreshMe keeps the session on a network error', async () => {
   expect(sessionToken()).toBe('tok')
 })
 
-it('watchAccountChanges logs out when the wallet switches to another address', async () => {
+const ADDR_B = '0x1234567890123456789012345678901234567890'
+
+it('watchAccountChanges signs in automatically as the new account when the plugin switches', async () => {
+  await loginWithOkx()
+  const clear = vi.spyOn(queryClient, 'clear')
+  let handler: (accounts: string[]) => void = () => {}
+  vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
+    handler = cb
+    return () => {}
+  })
+  watchAccountChanges()
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  // 插件上报的地址大小写不定，切换时要按 checksum 形式重新签名登录，和其它签名调用保持一致。
+  handler([ADDR_B.toLowerCase()])
+  await vi.waitFor(() => expect(sessionToken()).toBe('tok-b'))
+  expect(authApi.nonce).toHaveBeenLastCalledWith(ADDR_B)
+  expect(okx.personalSign).toHaveBeenLastCalledWith('siwe-message', ADDR_B)
+  expect(clear).toHaveBeenCalledTimes(1)
+  expect(authApi.logout).not.toHaveBeenCalled()
+  expect(toast.success).toHaveBeenCalledWith(`已切换到 ${shortAddress(ADDR_B)}`)
+  clear.mockRestore()
+})
+
+it('watchAccountChanges logs out when auto sign-in after a plugin switch fails', async () => {
   await loginWithOkx()
   let handler: (accounts: string[]) => void = () => {}
   vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
@@ -99,14 +125,12 @@ it('watchAccountChanges logs out when the wallet switches to another address', a
     return () => {}
   })
   watchAccountChanges()
-  handler([ADDR])
-  expect(sessionToken()).toBe('tok')
-  handler(['0x0000000000000000000000000000000000000001'])
+  vi.mocked(okx.personalSign).mockRejectedValueOnce(new Error('用户拒绝签名'))
+  handler([ADDR_B])
   await vi.waitFor(() => expect(sessionToken()).toBeNull())
-  expect(sessionToken()).toBeNull()
+  expect(authApi.logout).toHaveBeenCalledTimes(1)
+  expect(toast.error).toHaveBeenCalledWith('切换账号失败，请重新登录')
 })
-
-const ADDR_B = '0x1234567890123456789012345678901234567890'
 
 it('watchAccountChanges keeps the session when its address is still among the authorized accounts', async () => {
   vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
@@ -117,21 +141,10 @@ it('watchAccountChanges keeps the session when its address is still among the au
     return () => {}
   })
   watchAccountChanges()
+  vi.mocked(authApi.nonce).mockClear()
   handler([ADDR, ADDR_B])
   expect(sessionToken()).toBe('tok-b')
-})
-
-it('watchAccountChanges logs out once its address drops out of a shrunk account list', async () => {
-  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
-  await loginAs(ADDR_B)
-  let handler: (accounts: string[]) => void = () => {}
-  vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
-    handler = cb
-    return () => {}
-  })
-  watchAccountChanges()
-  handler([ADDR])
-  await vi.waitFor(() => expect(sessionToken()).toBeNull())
+  expect(authApi.nonce).not.toHaveBeenCalled()
 })
 
 it('watchAccountChanges logs out when accountsChanged reports an empty list', async () => {

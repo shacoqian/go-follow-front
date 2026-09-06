@@ -2,6 +2,8 @@ import { getAddress } from 'viem'
 import { queryClient } from '@/app/queryClient'
 import { ApiError } from '@/api/client'
 import { authApi } from '@/api/auth'
+import { toast } from '@/components/ui/toast'
+import { shortAddress } from '@/lib/format'
 import { isOkxInstalled, onAccountsChanged, personalSign, requestAccounts, waitForOkx } from '@/wallets/okx'
 import { clearSession, useSession, type Session } from './session'
 
@@ -85,10 +87,12 @@ export async function refreshMe(): Promise<boolean> {
   }
 }
 
-// 钱包切换账号：保护的本意是"会话地址一旦不再被插件授权就不能继续用"，不是"插件当前选中的地址
-// 必须等于会话地址"——eth_accounts[0] 只是插件当前选中项，管理授权/锁定解锁之类操作也会触发
-// accountsChanged 但顺序里第一项未必是会话地址。所以只在会话地址整个从新列表里消失时才登出；
-// switchAccount 进行中的事件一律忽略，那本来就是会话要变的预期路径。
+// 钱包切换账号：会话地址一旦不再出现在插件的已授权列表里，分两种情况——列表为空，说明本站
+// 被撤销授权/断开，只能登出；列表非空但不含会话地址，说明插件在别处切到了另一个账号，这时不必
+// 让用户跑回登录页再点一次，直接对新地址（eth_accounts[0]，插件当前选中项）重新签名登录。
+// 会话地址仍在列表里（不管它是不是插件当前选中项，管理授权/锁定解锁之类操作也会触发
+// accountsChanged 但顺序里第一项未必是会话地址）就什么都不做。
+// switchAccount 进行中的事件一律忽略，那本来就是会话要变的预期路径，同一时间只跑一个切换。
 export function watchAccountChanges(): () => void {
   if (!isOkxInstalled()) return () => {}
   return onAccountsChanged((accounts) => {
@@ -96,6 +100,17 @@ export function watchAccountChanges(): () => void {
     const s = useSession.getState().session
     if (!s) return
     const present = accounts.some((a) => a.toLowerCase() === s.address)
-    if (!present) void logout()
+    if (present) return
+    if (accounts.length === 0) {
+      void logout()
+      return
+    }
+    const next = getAddress(accounts[0])
+    void switchAccount(next)
+      .then(() => toast.success(`已切换到 ${shortAddress(next)}`))
+      .catch(() => {
+        toast.error('切换账号失败，请重新登录')
+        void logout()
+      })
   })
 }

@@ -12,6 +12,7 @@ import { useOkxAccounts } from '@/features/auth/useOkxAccounts'
 import { requestPermissions, supportsRequestPermissions } from '@/wallets/okx'
 import { useSession } from '@/features/auth/session'
 import { ApiError } from '@/api/client'
+import { shortAddress } from '@/lib/format'
 import { useToasts, Toaster } from '@/components/ui/toast'
 import { makeQueryClient } from './queryClient'
 import AccountMenu from './AccountMenu'
@@ -46,7 +47,7 @@ it('lists the authorized accounts with the session address selected', async () =
   renderMenu()
   const select = await screen.findByLabelText('账号')
   expect(select).toHaveValue(A)
-  expect(await screen.findByRole('option', { name: '管理授权账号…' })).toBeInTheDocument()
+  expect(await screen.findByRole('option', { name: '切换账号…' })).toBeInTheDocument()
 })
 
 it('switches account successfully and shows a toast', async () => {
@@ -72,7 +73,16 @@ it('hides the manage-accounts option when the wallet does not support it', async
   vi.mocked(supportsRequestPermissions).mockResolvedValue(false)
   renderMenu()
   await screen.findByLabelText('账号')
-  expect(screen.queryByRole('option', { name: '管理授权账号…' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('option', { name: '切换账号…' })).not.toBeInTheDocument()
+})
+
+it('degrades to plain text when only the session address is known and switching accounts is unsupported', async () => {
+  vi.mocked(useOkxAccounts).mockReturnValue({ accounts: [A], current: A, refresh: vi.fn(async () => {}) })
+  vi.mocked(supportsRequestPermissions).mockResolvedValue(false)
+  renderMenu()
+  await waitFor(() => expect(screen.getByText(shortAddress(A))).toBeInTheDocument())
+  expect(screen.queryByLabelText('账号')).not.toBeInTheDocument()
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
 })
 
 it('shows the session address alone when it is not among the authorized accounts', async () => {
@@ -90,8 +100,8 @@ it('requests permissions and refreshes accounts when "manage" is selected', asyn
   vi.mocked(requestPermissions).mockResolvedValueOnce(true)
   renderMenu()
   const select = await screen.findByLabelText('账号')
-  await screen.findByRole('option', { name: '管理授权账号…' })
-  await userEvent.selectOptions(select, '管理授权账号…')
+  await screen.findByRole('option', { name: '切换账号…' })
+  await userEvent.selectOptions(select, '切换账号…')
   expect(requestPermissions).toHaveBeenCalledTimes(1)
   await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1))
   expect(select).toHaveValue(A)

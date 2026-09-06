@@ -10,7 +10,7 @@ import { useSession } from '@/features/auth/session'
 import { useOkxAccounts } from '@/features/auth/useOkxAccounts'
 import { requestPermissions, supportsRequestPermissions } from '@/wallets/okx'
 
-// 不是真实地址，选中它触发"管理授权账号…"这个动作项，而不是切账号。
+// 不是真实地址，选中它触发"切换账号…"这个动作项，而不是切账号。
 const MANAGE = '__manage__'
 
 export default function AccountMenu() {
@@ -52,11 +52,19 @@ export default function AccountMenu() {
   const sessionAddress = session.address
 
   const known = new Set(accounts.map((a) => a.toLowerCase()))
-  const options = accounts.map((a) => ({ value: a.toLowerCase(), label: shortAddress(a) }))
+  const addressOptions = accounts.map((a) => ({ value: a.toLowerCase(), label: shortAddress(a) }))
   // 会话地址可能是用户在插件里撤销授权后剩下的孤儿地址：eth_accounts 里已经没有它了，
   // 但当前还在用它的会话，下拉里得留着，不然连当前账号都选不中。
-  if (!known.has(sessionAddress)) options.unshift({ value: sessionAddress, label: shortAddress(sessionAddress) })
-  if (canManage) options.push({ value: MANAGE, label: '管理授权账号…' })
+  if (!known.has(sessionAddress)) addressOptions.unshift({ value: sessionAddress, label: shortAddress(sessionAddress) })
+
+  // 只有会话这一个地址、又没有"切换账号…"入口（插件不支持 requestPermissions）时，下拉形同虚设——
+  // 没有别的账号可选，也没法唤起授权弹窗新增。退化成和 Shell 改造前一样的纯文本，别摆一个假下拉。
+  if (addressOptions.length === 1 && !canManage) {
+    return <span className="font-mono text-sm text-slate-600">{shortAddress(sessionAddress)}</span>
+  }
+
+  const options = [...addressOptions]
+  if (canManage) options.push({ value: MANAGE, label: '切换账号…' })
 
   function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const next = e.target.value
