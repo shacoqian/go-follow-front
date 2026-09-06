@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useSession } from '@/features/auth/session'
 import { logout, refreshMe, watchAccountChanges } from '@/features/auth/auth'
+import { waitForOkx } from '@/wallets/okx'
 import { shortAddress } from '@/lib/format'
 import { cn } from '@/lib/cn'
 import Banner from './Banner'
@@ -45,7 +46,17 @@ export default function Shell() {
   const session = useSession((s) => s.session)
   useEffect(() => {
     void refreshMe()
-    return watchAccountChanges()
+    // OKX 是异步注入的，首屏同步调用 watchAccountChanges 往往等不到 provider，
+    // 切换账号的登出保护就永远装不上——先等注入再挂监听。
+    let off = () => {}
+    let cancelled = false
+    void waitForOkx().then((ok) => {
+      if (ok && !cancelled) off = watchAccountChanges()
+    })
+    return () => {
+      cancelled = true
+      off()
+    }
   }, [])
   return (
     <div className="flex min-h-screen">

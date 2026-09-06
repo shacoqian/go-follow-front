@@ -11,18 +11,21 @@ vi.mock('@/api/auth', () => ({
   authApi: { nonce: vi.fn(), verify: vi.fn(), logout: vi.fn(), me: vi.fn(), action: vi.fn() },
 }))
 
+import { queryClient } from '@/app/queryClient'
 import { authApi } from '@/api/auth'
 import * as okx from '@/wallets/okx'
 import { loginWithOkx, logout, refreshMe, signAction, watchAccountChanges } from './auth'
 import { clearSession, sessionToken, useSession } from './session'
 
 const ADDR = '0x8ba1f109551bD432803012645Ac136ddd64DBA72'
+// 用相对时间，免得测试到了某天因为会话过期突然变红。
+const EXPIRES = new Date(Date.now() + 86_400_000).toISOString()
 
 beforeEach(() => {
   vi.clearAllMocks()
   clearSession()
   vi.mocked(authApi.nonce).mockResolvedValue({ message: 'siwe-message' })
-  vi.mocked(authApi.verify).mockResolvedValue({ token: 'tok', address: ADDR, role: 'admin', expires_at: '2026-09-13T00:00:00Z' })
+  vi.mocked(authApi.verify).mockResolvedValue({ token: 'tok', address: ADDR, role: 'admin', expires_at: EXPIRES })
   vi.mocked(authApi.logout).mockResolvedValue(undefined)
   vi.mocked(authApi.action).mockResolvedValue({ message: 'action-message' })
 })
@@ -32,7 +35,7 @@ it('loginWithOkx walks nonce → personal_sign → verify and stores a lowercase
   expect(authApi.nonce).toHaveBeenCalledWith(ADDR)
   expect(okx.personalSign).toHaveBeenCalledWith('siwe-message', ADDR)
   expect(authApi.verify).toHaveBeenCalledWith(ADDR, '0xsig')
-  expect(s).toEqual({ token: 'tok', address: ADDR.toLowerCase(), role: 'admin', expiresAt: '2026-09-13T00:00:00Z' })
+  expect(s).toEqual({ token: 'tok', address: ADDR.toLowerCase(), role: 'admin', expiresAt: EXPIRES })
   expect(sessionToken()).toBe('tok')
   expect(localStorage.getItem('gofollow.session')).toContain('"token":"tok"')
 })
@@ -50,12 +53,20 @@ it('logout clears the session even if the backend call fails', async () => {
   expect(sessionToken()).toBeNull()
 })
 
+it('logout clears the query cache so the next account starts empty', async () => {
+  const clear = vi.spyOn(queryClient, 'clear')
+  await loginWithOkx()
+  await logout()
+  expect(clear).toHaveBeenCalledTimes(1)
+  clear.mockRestore()
+})
+
 it('signAction requests a fresh challenge every time and signs with the session address', async () => {
   await loginWithOkx()
   await signAction('export_wallet', { wallet_id: '1' })
   await signAction('export_wallet', { wallet_id: '1' })
   expect(authApi.action).toHaveBeenCalledTimes(2)
-  expect(okx.personalSign).toHaveBeenLastCalledWith('action-message', ADDR.toLowerCase())
+  expect(okx.personalSign).toHaveBeenLastCalledWith('action-message', ADDR)
 })
 
 it('signAction refuses without a session', async () => {

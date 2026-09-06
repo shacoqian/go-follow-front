@@ -1,13 +1,12 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { useMemo } from 'react'
 import LoginPage from '@/features/auth/LoginPage'
 import { Toaster } from '@/components/ui/toast'
 import Placeholder from './Placeholder'
 import RequireAdmin from './RequireAdmin'
 import RequireAuth from './RequireAuth'
 import Shell from './Shell'
-import { makeQueryClient } from './queryClient'
+import { queryClient } from './queryClient'
 
 export function AppRoutes() {
   return (
@@ -36,9 +35,8 @@ export function AppRoutes() {
 }
 
 export default function App() {
-  const client = useMemo(makeQueryClient, [])
   return (
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={queryClient}>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AppRoutes />
       </BrowserRouter>

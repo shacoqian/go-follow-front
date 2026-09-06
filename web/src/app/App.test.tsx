@@ -1,14 +1,23 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 
 vi.mock('@/api/health', () => ({ healthApi: { get: vi.fn() } }))
+vi.mock('@/wallets/okx', () => ({
+  waitForOkx: vi.fn(async () => true),
+  isOkxInstalled: vi.fn(() => true),
+  onAccountsChanged: vi.fn(() => () => {}),
+  requestAccounts: vi.fn(),
+  personalSign: vi.fn(),
+}))
 vi.mock('@/features/auth/auth', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@/features/auth/auth')>()
   return { ...mod, refreshMe: vi.fn(async () => true), watchAccountChanges: vi.fn(() => () => {}), logout: vi.fn() }
 })
 
 import { healthApi } from '@/api/health'
+import { refreshMe, watchAccountChanges } from '@/features/auth/auth'
+import { waitForOkx } from '@/wallets/okx'
 import { useSession } from '@/features/auth/session'
 import { AppRoutes } from './App'
 import { makeQueryClient } from './queryClient'
@@ -24,7 +33,11 @@ function renderAt(path: string) {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks()
   useSession.getState().setSession(null)
+  vi.mocked(waitForOkx).mockResolvedValue(true)
+  vi.mocked(refreshMe).mockResolvedValue(true)
+  vi.mocked(watchAccountChanges).mockReturnValue(() => {})
   vi.mocked(healthApi.get).mockResolvedValue({ dry_run: false, kill_switch: false, engine_last_block: 1, node_block: 1 })
 })
 
@@ -60,4 +73,29 @@ it('shows the global banners from /health', async () => {
   renderAt('/wallets')
   expect(await screen.findByText('已全局停止跟单')).toBeInTheDocument()
   expect(screen.getByText('模拟运行中（dry-run）')).toBeInTheDocument()
+})
+
+it('arms the account watcher only after OKX is injected', async () => {
+  useSession.getState().setSession({ token: 't', address: '0xabc', role: 'user', expiresAt: '' })
+  const first = renderAt('/wallets')
+  await waitFor(() => expect(watchAccountChanges).toHaveBeenCalledTimes(1))
+  first.unmount()
+
+  vi.mocked(watchAccountChanges).mockClear()
+  vi.mocked(waitForOkx).mockResolvedValue(false)
+  renderAt('/wallets')
+  await waitFor(() => expect(refreshMe).toHaveBeenCalled())
+  expect(watchAccountChanges).not.toHaveBeenCalled()
+})
+
+it('sends a visitor with an expired session back to the login page', () => {
+  useSession.getState().setSession({
+    token: 't',
+    address: '0xabc',
+    role: 'user',
+    expiresAt: new Date(Date.now() - 1000).toISOString(),
+  })
+  renderAt('/wallets')
+  expect(screen.getByRole('button', { name: '连接 OKX 钱包' })).toBeInTheDocument()
+  expect(useSession.getState().session).toBeNull()
 })

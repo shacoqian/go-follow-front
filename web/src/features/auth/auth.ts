@@ -1,3 +1,5 @@
+import { getAddress } from 'viem'
+import { queryClient } from '@/app/queryClient'
 import { ApiError } from '@/api/client'
 import { authApi } from '@/api/auth'
 import { isOkxInstalled, onAccountsChanged, personalSign, requestAccounts, waitForOkx } from '@/wallets/okx'
@@ -28,6 +30,8 @@ export async function logout(): Promise<void> {
     // ignore
   } finally {
     clearSession()
+    // 换人登录不能看到上一个账号的数据：会话清了，缓存也得清。
+    queryClient.clear()
   }
 }
 
@@ -36,7 +40,8 @@ export async function signAction(action: string, params: Record<string, string>)
   const s = useSession.getState().session
   if (!s) throw new Error('未登录')
   const { message } = await authApi.action(action, params)
-  return personalSign(message, s.address)
+  // 会话里存的是小写地址，签名要用 checksum 形式，和登录时保持一致。
+  return personalSign(message, getAddress(s.address))
 }
 
 // 启动时校验会话并刷新角色。401/403 清会话；网络错误保留（离线时不把人踢出去）。

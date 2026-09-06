@@ -16,3 +16,6 @@ export function makeQueryClient(): QueryClient {
     defaultOptions: { queries: { retry: false, refetchOnWindowFocus: true, staleTime: 5_000 } },
   })
 }
+
+// 全局单例：登出时 auth 要清空缓存，不能让每个 Provider 各拿一份。
+export const queryClient = makeQueryClient()
