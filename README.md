@@ -20,6 +20,8 @@ domain = "follow.example.com"            # 前端对外域名（无端口）
 uri = "http://follow.example.com:8080"   # 前端对外完整地址
 ```
 
+`trusted_proxies` 要填本前端服务所在主机的 IP：与 gofollow 同机就是 `127.0.0.1`，分开部署时改成前端那台机器的 IP，否则 gofollow 的限流和审计记录到的都是反代自己的地址，而不是真实用户 IP。
+
 前端服务环境变量：`LISTEN`（默认 `0.0.0.0:8080`）、`GOFOLLOW_URL`（默认 `http://127.0.0.1:8090`）。第一版只做 HTTP。
 
 ## 开发

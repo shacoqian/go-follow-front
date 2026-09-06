@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"testing/fstest"
 )
@@ -51,6 +52,33 @@ func TestProxyStripsPrefixAndForwardsHeaders(t *testing.T) {
 	}
 	if w.Code != 418 || w.Body.String() != `{"error":"teapot"}` {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// 客户端伪造的转发头不能落到后端：限流和审计都按这两个头记录来源 IP。
+func TestProxyIgnoresClientForwardingHeaders(t *testing.T) {
+	var gotXFF, gotReal string
+	h, _ := newTestHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotXFF, gotReal = r.Header.Get("X-Forwarded-For"), r.Header.Get("X-Real-IP")
+	}))
+	get(t, h, "/api/wallets", map[string]string{"X-Forwarded-For": "1.2.3.4", "X-Real-IP": "9.9.9.9"})
+	if gotXFF != "203.0.113.9" {
+		t.Fatalf("x-forwarded-for=%q", gotXFF)
+	}
+	if gotReal != "" {
+		t.Fatalf("x-real-ip=%q", gotReal)
+	}
+}
+
+// 路径里的 %2F 必须原样转给后端，否则会被还原成路径分隔符。
+func TestProxyPreservesEscapedPath(t *testing.T) {
+	var gotPath string
+	h, _ := newTestHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.RequestURI()
+	}))
+	get(t, h, "/api/x/a%2Fb", nil)
+	if gotPath != "/x/a%2Fb" {
+		t.Fatalf("path=%q", gotPath)
 	}
 }
 
@@ -125,5 +153,27 @@ func TestProxyBareApiPath(t *testing.T) {
 	}
 	if w.Body.String() != "ok" {
 		t.Fatalf("body=%s", w.Body.String())
+	}
+}
+
+// 裸 /api 的 POST 不能被 301 降级成 GET，请求体也要原样送到后端。
+func TestProxyBareApiPathPost(t *testing.T) {
+	var gotMethod, gotPath, gotBody string
+	h, _ := newTestHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotMethod, gotPath, gotBody = r.Method, r.URL.RequestURI(), string(b)
+		w.WriteHeader(200)
+		_, _ = io.WriteString(w, "ok")
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/api", strings.NewReader(`{"a":1}`))
+	req.RemoteAddr = "203.0.113.9:1234"
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code == http.StatusMovedPermanently {
+		t.Fatalf("bare /api should not redirect, got %d", w.Code)
+	}
+	if gotMethod != http.MethodPost || gotPath != "/" || gotBody != `{"a":1}` {
+		t.Fatalf("method=%q path=%q body=%q", gotMethod, gotPath, gotBody)
 	}
 }

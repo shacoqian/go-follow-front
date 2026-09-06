@@ -36,6 +36,11 @@ func newProxy(backend *url.URL) http.Handler {
 	p := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(backend)
+			// 客户端自带的转发头必须丢掉，否则能伪造来源 IP：SetXForwarded 会把
+			// 已有的 X-Forwarded-For 拼在真实 IP 前面，X-Real-IP 更是原样透传。
+			// 后端的限流与审计 IP 都依赖这两个头。
+			r.Out.Header.Del("X-Forwarded-For")
+			r.Out.Header.Del("X-Real-IP")
 			r.SetXForwarded()
 			// 去掉 /api 前缀：/api/wallets → /wallets；/api → /
 			trimmed := strings.TrimPrefix(r.In.URL.Path, "/api")
@@ -43,7 +48,12 @@ func newProxy(backend *url.URL) http.Handler {
 				trimmed = "/"
 			}
 			r.Out.URL.Path = trimmed
-			r.Out.URL.RawPath = ""
+			// RawPath 保留原始转义（如 %2F），否则路径里的编码斜杠会被还原成分隔符。
+			rawTrimmed := strings.TrimPrefix(r.In.URL.EscapedPath(), "/api")
+			if rawTrimmed == "" {
+				rawTrimmed = "/"
+			}
+			r.Out.URL.RawPath = rawTrimmed
 			r.Out.Host = backend.Host
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
