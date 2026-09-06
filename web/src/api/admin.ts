@@ -38,6 +38,8 @@ export interface AdminUser {
   positions_open: number
 }
 
+export type AdminWithdrawal = Omit<Withdrawal, 'tx_hash'> & { owner: string; tx_id: number | null }
+
 export interface AuditRow {
   id: number
   owner: string
@@ -59,7 +61,7 @@ export const adminApi = {
   wallets: (owner?: string) =>
     request<(Wallet & { owner: string })[]>('GET', `/admin/wallets${qs({ owner })}`, undefined),
   withdrawals: (owner?: string) =>
-    request<(Withdrawal & { owner: string })[]>('GET', `/admin/withdrawals${qs({ owner })}`, undefined),
+    request<AdminWithdrawal[]>('GET', `/admin/withdrawals${qs({ owner })}`, undefined),
   enableTask: (id: number) => request<void>('POST', `/admin/tasks/${id}/enable`, undefined),
   disableTask: (id: number) => request<void>('POST', `/admin/tasks/${id}/disable`, undefined),
   audit: (p: { owner?: string; action?: string; limit: number }) =>

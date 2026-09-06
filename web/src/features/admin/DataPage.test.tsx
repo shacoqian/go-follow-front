@@ -19,10 +19,25 @@ function renderPage(path = '/admin/data') {
     </QueryClientProvider>,
   )
 }
+const withdrawal = {
+  id: 5,
+  owner: '0xabc',
+  wallet_id: 7,
+  asset: 'USDG',
+  amount: '1000000',
+  to_addr: '0x2222222222222222222222222222222222222222',
+  status: 'CONFIRMED',
+  error: '',
+  tx_id: 42,
+  created_at: '',
+  updated_at: '',
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(adminApi.tasks).mockResolvedValue([task])
   vi.mocked(adminApi.wallets).mockResolvedValue([{ id: 1, owner: '0xabc', address: '0x1111111111111111111111111111111111111111', label: 'w', note: '', status: 'active', created_at: '' } as never])
+  vi.mocked(adminApi.withdrawals).mockResolvedValue([withdrawal as never])
   vi.mocked(adminApi.disableTask).mockResolvedValue(undefined)
 })
 
@@ -39,4 +54,9 @@ it('lists tasks by default, filters by owner from the URL, switches tabs, and em
   expect(await screen.findByText('0x1111…1111')).toBeInTheDocument()
   expect(adminApi.wallets).toHaveBeenLastCalledWith('0xabc')
   expect(screen.queryByText(/wallet_key/)).not.toBeInTheDocument()
+
+  await userEvent.click(screen.getByRole('tab', { name: '提现' }))
+  const withdrawalRow = (await screen.findByText('42')).closest('tr')!
+  expect(within(withdrawalRow).getByText('1')).toBeInTheDocument()
+  expect(screen.queryByText('哈希')).not.toBeInTheDocument()
 })

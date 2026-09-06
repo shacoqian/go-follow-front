@@ -52,6 +52,7 @@ export function TaskRow({
   disableBusy?: boolean
 }) {
   const adminPaused = !t.enabled && t.paused_reason === 'admin'
+  const badge = taskStatusBadge(t)
   const limitUnlimited = t.spend_limit_usdg === '0'
   const spentPct = limitUnlimited ? 0 : Math.min(100, (Number(t.spent_usdg) / Number(t.spend_limit_usdg)) * 100)
 
@@ -63,7 +64,7 @@ export function TaskRow({
       </Td>
       <Td>{wallet ? wallet.label || '（未命名）' : `#${t.wallet_id}`}</Td>
       <Td>
-        <Badge tone={taskStatusBadge(t).tone}>{taskStatusBadge(t).label}</Badge>
+        <Badge tone={badge.tone}>{badge.label}</Badge>
       </Td>
       <Td>
         {limitUnlimited ? (

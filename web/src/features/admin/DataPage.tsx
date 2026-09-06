@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { adminApi } from '@/api/admin'
+import { adminApi, type AdminWithdrawal } from '@/api/admin'
 import type { Task } from '@/api/tasks'
-import type { Wallet, Withdrawal } from '@/api/wallets'
+import type { Wallet } from '@/api/wallets'
 import type { Position } from '@/api/positions'
 import type { Decision } from '@/api/decisions'
 import { Badge } from '@/components/ui/badge'
@@ -15,14 +15,12 @@ import { Table, Tr, Td } from '@/components/ui/table'
 import { taskStatusBadge, taskSummaryText } from '@/features/tasks/TaskRow'
 import { outcomeTone } from '@/features/positions/outcome'
 import { statusText, statusTone } from '@/features/wallets/withdrawStatus'
-import { txUrl } from '@/lib/explorer'
 import { fmtTime, shortAddress } from '@/lib/format'
 import { unitsToUsdg, weiToEth } from '@/lib/amount'
 import { adminKeys } from './useAdmin'
 
 type OwnedWallet = Wallet & { owner: string }
 type OwnedPosition = Position & { owner: string }
-type OwnedWithdrawal = Withdrawal & { owner: string }
 
 const TABS: { key: 'tasks' | 'positions' | 'wallets' | 'withdrawals' | 'decisions'; label: string }[] = [
   { key: 'tasks', label: '任务' },
@@ -77,7 +75,7 @@ export default function DataPage() {
   }
 
   const owner = ownerParam || undefined
-  type Row = Task | OwnedPosition | OwnedWallet | OwnedWithdrawal | Decision
+  type Row = Task | OwnedPosition | OwnedWallet | AdminWithdrawal | Decision
   const query = useQuery<Row[]>({
     queryKey: adminKeys.list(tab, ownerParam),
     queryFn: () => adminApi[tab](owner) as Promise<Row[]>,
@@ -158,7 +156,7 @@ export default function DataPage() {
         ) : tab === 'wallets' ? (
           <WalletsTab rows={(query.data as OwnedWallet[] | undefined) ?? []} />
         ) : tab === 'withdrawals' ? (
-          <WithdrawalsTab rows={(query.data as OwnedWithdrawal[] | undefined) ?? []} />
+          <WithdrawalsTab rows={(query.data as AdminWithdrawal[] | undefined) ?? []} />
         ) : (
           <DecisionsTab rows={(query.data as Decision[] | undefined) ?? []} />
         )}
@@ -259,38 +257,21 @@ function WalletsTab({ rows }: { rows: OwnedWallet[] }) {
   )
 }
 
-function WithdrawalsTab({ rows }: { rows: OwnedWithdrawal[] }) {
+function WithdrawalsTab({ rows }: { rows: AdminWithdrawal[] }) {
   return (
-    <Table head={['用户', '钱包 ID', '资产', '金额', '状态', '哈希']}>
-      {rows.map((w) => {
-        const url = txUrl(w.tx_hash)
-        return (
-          <Tr key={w.id}>
-            <Td>{w.owner}</Td>
-            <Td>{w.wallet_id}</Td>
-            <Td>{w.asset}</Td>
-            <Td>{w.asset === 'USDG' ? unitsToUsdg(w.amount) : weiToEth(w.amount)}</Td>
-            <Td>
-              <Badge tone={statusTone(w.status)}>{statusText(w.status)}</Badge>
-            </Td>
-            <Td>
-              <span className="font-mono text-xs">
-                {w.tx_hash ? (
-                  url ? (
-                    <a href={url} target="_blank" rel="noreferrer" className="underline">
-                      {shortAddress(w.tx_hash)}
-                    </a>
-                  ) : (
-                    shortAddress(w.tx_hash)
-                  )
-                ) : (
-                  '-'
-                )}
-              </span>
-            </Td>
-          </Tr>
-        )
-      })}
+    <Table head={['用户', '钱包 ID', '资产', '金额', '状态', '交易 ID']}>
+      {rows.map((w) => (
+        <Tr key={w.id}>
+          <Td>{w.owner}</Td>
+          <Td>{w.wallet_id}</Td>
+          <Td>{w.asset}</Td>
+          <Td>{w.asset === 'USDG' ? unitsToUsdg(w.amount) : weiToEth(w.amount)}</Td>
+          <Td>
+            <Badge tone={statusTone(w.status)}>{statusText(w.status)}</Badge>
+          </Td>
+          <Td>{w.tx_id ?? '—'}</Td>
+        </Tr>
+      ))}
     </Table>
   )
 }
