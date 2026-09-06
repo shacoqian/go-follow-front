@@ -27,6 +27,18 @@ const amount = z.string().refine(
   '金额格式不正确',
 )
 
+// 可选金额：'' 视为未设；其余按 USDG 6 位小数校验。返回最小单位串（'' → '0'）或抛 Error('金额格式不正确')。
+function optUnits(s: string): string {
+  return s.trim() === '' ? '0' : usdgToUnits(s.trim())
+}
+
+// '0' → ''（未设）；否则按 USDG 精度回显。
+function zeroToEmpty(units: string): string {
+  return units === '0' ? '' : unitsToUsdg(units)
+}
+
+const MAX_INT64 = 9223372036854775807n
+
 function parseBlacklist(s: string): string[] {
   return s
     .split('\n')
@@ -39,8 +51,10 @@ export const strategySchema = z
   .object({
     size_mode: z.enum(['fixed', 'ratio']),
     size_value: z.string(),
-    max_per_trade: amount,
-    min_target_trade: amount,
+    ratio_min: z.string(),
+    max_per_trade: z.string(),
+    target_min: z.string(),
+    target_max: z.string(),
     spend_limit: amount,
     max_addon_per_token: z.number({ error: '请输入数字' }).int('请输入整数').min(1, '至少 1 次'),
     sell_mode: z.enum(['manual', 'proportional', 'all']),
@@ -70,18 +84,62 @@ export const strategySchema = z
       } catch {
         ctx.addIssue({ code: 'custom', path: ['size_value'], message: '金额格式不正确' })
       }
-    } else if (!/^\d+(\.\d+)?$/.test(v.size_value)) {
-      ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例格式不正确' })
     } else {
-      const bps = pctToBps(Number(v.size_value))
-      if (bps < 1) ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例必须大于 0' })
-      else if (bps > 10000) ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例不能超过 100' })
+      if (!/^\d+(\.\d+)?$/.test(v.size_value)) {
+        ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例格式不正确' })
+      } else {
+        const bps = pctToBps(Number(v.size_value))
+        if (bps < 1) {
+          ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例必须大于 0' })
+        } else if (BigInt(Math.round(Number(v.size_value) * 100)) > MAX_INT64) {
+          ctx.addIssue({ code: 'custom', path: ['size_value'], message: '比例过大' })
+        }
+      }
+
+      let maxUnits: bigint | null = null
+      try {
+        const units = optUnits(v.max_per_trade)
+        if (units === '0') {
+          ctx.addIssue({ code: 'custom', path: ['max_per_trade'], message: '我方上限必须大于 0' })
+        } else {
+          maxUnits = BigInt(units)
+        }
+      } catch {
+        ctx.addIssue({ code: 'custom', path: ['max_per_trade'], message: '金额格式不正确' })
+      }
+
+      try {
+        const ratioMinUnits = optUnits(v.ratio_min)
+        if (maxUnits !== null && BigInt(ratioMinUnits) > maxUnits) {
+          ctx.addIssue({ code: 'custom', path: ['ratio_min'], message: '我方下限不能大于上限' })
+        }
+      } catch {
+        ctx.addIssue({ code: 'custom', path: ['ratio_min'], message: '金额格式不正确' })
+      }
+    }
+
+    let targetMinUnits: string | null = null
+    let targetMaxUnits: string | null = null
+    try {
+      targetMinUnits = optUnits(v.target_min)
+    } catch {
+      ctx.addIssue({ code: 'custom', path: ['target_min'], message: '金额格式不正确' })
     }
     try {
-      if (usdgToUnits(v.max_per_trade) === '0') ctx.addIssue({ code: 'custom', path: ['max_per_trade'], message: '单笔上限必须大于 0' })
+      targetMaxUnits = optUnits(v.target_max)
     } catch {
-      /* amount 校验已报 */
+      ctx.addIssue({ code: 'custom', path: ['target_max'], message: '金额格式不正确' })
     }
+    if (
+      targetMinUnits !== null &&
+      targetMaxUnits !== null &&
+      targetMinUnits !== '0' &&
+      targetMaxUnits !== '0' &&
+      BigInt(targetMaxUnits) < BigInt(targetMinUnits)
+    ) {
+      ctx.addIssue({ code: 'custom', path: ['target_max'], message: '目标最大买入不能小于最小买入' })
+    }
+
     if (pctToBps(v.stop_loss_pct) >= 10000) {
       ctx.addIssue({ code: 'custom', path: ['stop_loss_pct'], message: '止损比例须小于 100' })
     }
@@ -100,11 +158,16 @@ export const strategySchema = z
 
 export type StrategyValues = z.infer<typeof strategySchema>
 
+export const RATIO_DEFAULTS = { size_value: '10', ratio_min: '', max_per_trade: '20' } as const
+export const FIXED_DEFAULTS = { size_value: '10' } as const
+
 export const defaultStrategy: StrategyValues = {
   size_mode: 'fixed',
-  size_value: '10',
-  max_per_trade: '20',
-  min_target_trade: '5',
+  size_value: FIXED_DEFAULTS.size_value,
+  ratio_min: RATIO_DEFAULTS.ratio_min,
+  max_per_trade: RATIO_DEFAULTS.max_per_trade,
+  target_min: '',
+  target_max: '',
   spend_limit: '0',
   max_addon_per_token: 1,
   sell_mode: 'proportional',
@@ -129,8 +192,10 @@ export function toBackend(v: StrategyValues, ids: { wallet_id: number; target_id
     ...ids,
     size_mode: v.size_mode,
     size_value: v.size_mode === 'fixed' ? usdgToUnits(v.size_value) : String(pctToBps(Number(v.size_value))),
-    max_per_trade_usdg: usdgToUnits(v.max_per_trade),
-    min_target_trade_usdg: usdgToUnits(v.min_target_trade),
+    ratio_min_usdg: v.size_mode === 'ratio' ? optUnits(v.ratio_min) : '0',
+    max_per_trade_usdg: v.size_mode === 'ratio' ? optUnits(v.max_per_trade) : '0',
+    min_target_trade_usdg: optUnits(v.target_min),
+    max_target_trade_usdg: optUnits(v.target_max),
     spend_limit_usdg: usdgToUnits(v.spend_limit),
     max_addon_per_token: v.max_addon_per_token,
     sell_mode: v.sell_mode,
@@ -155,8 +220,12 @@ export function fromBackend(t: TaskInput): StrategyValues {
   return {
     size_mode: t.size_mode,
     size_value: t.size_mode === 'fixed' ? unitsToUsdg(t.size_value) : String(bpsToPct(Number(t.size_value))),
-    max_per_trade: unitsToUsdg(t.max_per_trade_usdg),
-    min_target_trade: unitsToUsdg(t.min_target_trade_usdg),
+    ratio_min: zeroToEmpty(t.ratio_min_usdg),
+    // fixed 模式下这个字段不展示、后端值恒为 0：不把 0 带回界面，给一个可用的默认上限，
+    // 这样用户切回 ratio 模式不会立刻被"必须大于 0"卡住。
+    max_per_trade: t.size_mode === 'ratio' ? unitsToUsdg(t.max_per_trade_usdg) : RATIO_DEFAULTS.max_per_trade,
+    target_min: zeroToEmpty(t.min_target_trade_usdg),
+    target_max: zeroToEmpty(t.max_target_trade_usdg),
     spend_limit: unitsToUsdg(t.spend_limit_usdg),
     max_addon_per_token: t.max_addon_per_token,
     sell_mode: t.sell_mode,
@@ -175,4 +244,18 @@ export function fromBackend(t: TaskInput): StrategyValues {
     retry_max: t.retry_max,
     token_blacklist: t.token_blacklist.join('\n'),
   }
+}
+
+export function ratioSummary(t: TaskInput): string {
+  const max = unitsToUsdg(t.max_per_trade_usdg)
+  return t.ratio_min_usdg !== '0' ? `（${unitsToUsdg(t.ratio_min_usdg)}–${max} USDG）` : `（≤${max} USDG）`
+}
+
+export function targetFilterSummary(t: TaskInput): string {
+  const min = t.min_target_trade_usdg !== '0' ? unitsToUsdg(t.min_target_trade_usdg) : ''
+  const max = t.max_target_trade_usdg !== '0' ? unitsToUsdg(t.max_target_trade_usdg) : ''
+  if (min && max) return ` · 目标 ${min}–${max} USDG`
+  if (min) return ` · 目标 ≥${min} USDG`
+  if (max) return ` · 目标 ≤${max} USDG`
+  return ''
 }

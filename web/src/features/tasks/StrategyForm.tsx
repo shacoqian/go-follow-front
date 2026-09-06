@@ -77,8 +77,8 @@ export function StrategyForm({
         <Field label="单笔上限（USDG）" htmlFor="max_per_trade" error={errors.max_per_trade?.message}>
           <Input id="max_per_trade" {...register('max_per_trade')} />
         </Field>
-        <Field label="目标最小交易额（USDG）" htmlFor="min_target_trade" error={errors.min_target_trade?.message}>
-          <Input id="min_target_trade" {...register('min_target_trade')} />
+        <Field label="目标最小交易额（USDG）" htmlFor="target_min" error={errors.target_min?.message}>
+          <Input id="target_min" {...register('target_min')} />
         </Field>
         <Field label="总额度（USDG，0=不限）" htmlFor="spend_limit" error={errors.spend_limit?.message}>
           <Input id="spend_limit" {...register('spend_limit')} />

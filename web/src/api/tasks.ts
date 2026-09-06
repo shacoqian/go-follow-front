@@ -5,8 +5,10 @@ export interface TaskInput {
   target_id: number
   size_mode: 'fixed' | 'ratio'
   size_value: string
+  ratio_min_usdg: string
   max_per_trade_usdg: string
   min_target_trade_usdg: string
+  max_target_trade_usdg: string
   spend_limit_usdg: string
   max_addon_per_token: number
   sell_mode: 'manual' | 'proportional' | 'all'
