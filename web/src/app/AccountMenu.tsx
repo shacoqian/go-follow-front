@@ -1,23 +1,31 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { getAddress } from 'viem'
 import { Select } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
 import { ApiError } from '@/api/client'
 import { shortAddress } from '@/lib/format'
-import { runSwitchChain } from '@/features/auth/auth'
-import { useSession } from '@/features/auth/session'
+import { isSwitchBusy, runSwitchChain, subscribeSwitchBusy } from '@/features/auth/auth'
+import { sessionValid, useSession } from '@/features/auth/session'
 import { useOkxAccounts } from '@/features/auth/useOkxAccounts'
 import { requestPermissions, supportsRequestPermissions } from '@/wallets/okx'
 
 // 不是真实地址，选中它触发"切换账号…"这个动作项，而不是切账号。
 const MANAGE = '__manage__'
 
+// 任意一条切换链路（手动或插件自动触发）忙碌期间，下拉整体禁用——避免手快点了两下，
+// 或者跟插件自动切换撞在一起。
+function useSwitchBusy(): boolean {
+  return useSyncExternalStore(subscribeSwitchBusy, isSwitchBusy)
+}
+
 export default function AccountMenu() {
   const session = useSession((s) => s.session)
-  const { accounts, refresh } = useOkxAccounts()
+  const saved = useSession((s) => s.saved)
+  const { current, refresh } = useOkxAccounts()
   const [canManage, setCanManage] = useState(false)
   const [value, setValue] = useState(session?.address ?? '')
+  const busy = useSwitchBusy()
 
   useEffect(() => {
     let cancelled = false
@@ -38,11 +46,13 @@ export default function AccountMenu() {
     // 选项值是小写地址（方便跟会话地址比较），真正签名登录要用 checksum 形式，和其它签名调用保持一致。
     // runSwitchChain 是手动切换（这里）和插件自动切换（watchAccountChanges）共用的唯一入口——
     // 这样"切换进行中收到新的 accountsChanged 事件"这类锁存/补跑逻辑两边都能用上，不会因为是
-    // 手动点出来的就漏掉。成功/失败要做什么（toast、下拉退回原地址）通过 handlers 传进去；
-    // runSwitchChain 自己不会往上抛错，所以这里不需要再挂 useMutation 的 onSuccess/onError。
-    mutationFn: (address: string) =>
-      runSwitchChain(getAddress(address), {
-        onSuccess: () => toast.success('已切换账号'),
+    // 手动点出来的就漏掉。缓存里的有效会话经 resumeOrLogin/`/auth/me` 校验后直接切换，不会
+    // 弹签名；缓存过期或没有缓存的地址会经 loginAs 弹签名，这时如果 OKX 当前选中的不是这个
+    // 地址，签名会失败/被拒，走下面 onError 里那句固定文案。
+    mutationFn: (address: string) => {
+      const checksummed = getAddress(address)
+      return runSwitchChain(checksummed, {
+        onSuccess: () => toast.success(`已切换到 ${shortAddress(checksummed)}`),
         onError: (err) => {
           // 后端明确拒绝（账号被锁定、限流等）展示后端原话；已经有一个切换在跑（比如手快点了
           // 两下，或者插件自动切换和手动切换撞车）展示那句提示；签名被拒/插件只认当前账号这类
@@ -57,7 +67,8 @@ export default function AccountMenu() {
           toast.error(message)
           setValue(session?.address ?? '')
         },
-      }),
+      })
+    },
     meta: { silent: true },
   })
 
@@ -65,11 +76,23 @@ export default function AccountMenu() {
   // 局部变量捕获，避免闭包里 TS 认不出 session 已经判过非空。
   const sessionAddress = session.address
 
-  const known = new Set(accounts.map((a) => a.toLowerCase()))
-  const addressOptions = accounts.map((a) => ({ value: a.toLowerCase(), label: shortAddress(a) }))
-  // 会话地址可能是用户在插件里撤销授权后剩下的孤儿地址：eth_accounts 里已经没有它了，
-  // 但当前还在用它的会话，下拉里得留着，不然连当前账号都选不中。
-  if (!known.has(sessionAddress)) addressOptions.unshift({ value: sessionAddress, label: shortAddress(sessionAddress) })
+  // 选项来源：当前会话地址 + saved 里所有记住的地址（本机曾经登录过、可能已过期），
+  // 再加上插件当前选中账号（如果它还不在里面）——不再以插件的 eth_accounts 列表为主，
+  // 系统内切换本来就是为了不必回插件。全部按小写地址去重。
+  const pluginCurrent = current?.toLowerCase() ?? null
+  const addrs = new Set<string>([sessionAddress, ...Object.keys(saved)])
+  if (pluginCurrent) addrs.add(pluginCurrent)
+
+  const addressOptions = [...addrs].map((addr) => {
+    const cached = saved[addr]
+    let label = shortAddress(addr)
+    if (cached) {
+      if (!sessionValid(cached)) label += '（需重新签名）'
+    } else if (addr === pluginCurrent) {
+      label += '（插件当前）'
+    }
+    return { value: addr, label }
+  })
 
   // 只有会话这一个地址、又没有"切换账号…"入口（插件不支持 requestPermissions）时，下拉形同虚设——
   // 没有别的账号可选，也没法唤起授权弹窗新增。退化成和 Shell 改造前一样的纯文本，别摆一个假下拉。
@@ -103,7 +126,7 @@ export default function AccountMenu() {
       options={options}
       value={value}
       onChange={onChange}
-      disabled={mutation.isPending}
+      disabled={mutation.isPending || busy}
     />
   )
 }

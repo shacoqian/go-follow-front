@@ -8,6 +8,7 @@ vi.mock('@/wallets/okx', () => ({
   requestAccounts: vi.fn(async () => '0x8ba1f109551bD432803012645Ac136ddd64DBA72'),
   personalSign: vi.fn(async () => '0xsig'),
   onAccountsChanged: vi.fn(),
+  listAccounts: vi.fn(async () => []),
 }))
 vi.mock('@/api/auth', () => ({
   authApi: { nonce: vi.fn(), verify: vi.fn(), logout: vi.fn(), me: vi.fn(), action: vi.fn() },
@@ -19,7 +20,7 @@ import { authApi } from '@/api/auth'
 import { toast } from '@/components/ui/toast'
 import { shortAddress } from '@/lib/format'
 import * as okx from '@/wallets/okx'
-import { loginAs, loginWithOkx, logout, onUnauthorized, refreshMe, resumeOrLogin, runSwitchChain, signAction, switchAccount, watchAccountChanges } from './auth'
+import { loginAs, loginWithOkx, logout, notePluginAccounts, onUnauthorized, refreshMe, resumeOrLogin, runSwitchChain, signAction, switchAccount, watchAccountChanges } from './auth'
 import { clearAllSessions, sessionToken, useSession } from './session'
 
 const ADDR = '0x8ba1f109551bD432803012645Ac136ddd64DBA72'
@@ -29,6 +30,10 @@ const EXPIRES = new Date(Date.now() + 86_400_000).toISOString()
 beforeEach(() => {
   vi.clearAllMocks()
   clearAllSessions()
+  // pluginCurrent 是 auth.ts 里的模块级变量，不会随 vi.clearAllMocks()/clearAllSessions() 重置——
+  // 每个用例开始前手动清成"页面刚加载"的状态（没有任何已知的插件当前账号），不然上一个用例
+  // 留下的值会串进这一个用例，把"首次事件"错判成"没变"。
+  notePluginAccounts([])
   vi.mocked(authApi.nonce).mockResolvedValue({ message: 'siwe-message' })
   vi.mocked(authApi.verify).mockResolvedValue({ token: 'tok', address: ADDR, role: 'admin', expires_at: EXPIRES })
   vi.mocked(authApi.logout).mockResolvedValue(undefined)
@@ -76,6 +81,33 @@ it('signAction requests a fresh challenge every time and signs with the session 
 
 it('signAction refuses without a session', async () => {
   await expect(signAction('export_wallet', { wallet_id: '1' })).rejects.toThrow('未登录')
+})
+
+it('signAction refuses to sign when OKX is currently on a different account than the session', async () => {
+  await loginWithOkx() // 会话 A
+  vi.mocked(okx.personalSign).mockClear()
+  vi.mocked(okx.listAccounts).mockResolvedValueOnce([ADDR_B])
+  await expect(signAction('export_wallet', { wallet_id: '1' })).rejects.toThrow(
+    `请在 OKX 里切到 ${shortAddress(ADDR)} 后重试`,
+  )
+  expect(authApi.action).not.toHaveBeenCalled()
+  expect(okx.personalSign).not.toHaveBeenCalled()
+})
+
+it('signAction signs normally when OKX is already on the session account', async () => {
+  await loginWithOkx() // 会话 A
+  vi.mocked(okx.listAccounts).mockResolvedValueOnce([ADDR])
+  await signAction('export_wallet', { wallet_id: '1' })
+  expect(authApi.action).toHaveBeenCalledTimes(1)
+  expect(okx.personalSign).toHaveBeenCalledWith('action-message', ADDR)
+})
+
+it('signAction does not gate on OKX when listAccounts reports no authorized accounts', async () => {
+  await loginWithOkx() // 会话 A
+  vi.mocked(okx.listAccounts).mockResolvedValueOnce([])
+  await signAction('export_wallet', { wallet_id: '1' })
+  expect(authApi.action).toHaveBeenCalledTimes(1)
+  expect(okx.personalSign).toHaveBeenCalledWith('action-message', ADDR)
 })
 
 it('refreshMe updates the role and clears the session on 401/403', async () => {
@@ -133,19 +165,45 @@ it('watchAccountChanges logs out when auto sign-in after a plugin switch fails',
   expect(toast.error).toHaveBeenCalledWith('切换账号失败，请重新登录')
 })
 
-it('watchAccountChanges keeps the session when its address is still among the authorized accounts', async () => {
-  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
-  await loginAs(ADDR_B)
+it('does not re-trigger a switch when accountsChanged repeats the same accounts[0] (e.g. lock/unlock)', async () => {
+  await loginWithOkx() // 会话 A
   let handler: (accounts: string[]) => void = () => {}
   vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
     handler = cb
     return () => {}
   })
   watchAccountChanges()
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  handler([ADDR_B]) // 插件真的切到了 B，首次事件按"变了"处理，自动签名登录
+  await vi.waitFor(() => expect(sessionToken()).toBe('tok-b'))
+  expect(toast.success).toHaveBeenCalledTimes(1)
   vi.mocked(authApi.nonce).mockClear()
-  handler([ADDR, ADDR_B])
-  expect(sessionToken()).toBe('tok-b')
+  handler([ADDR_B]) // 插件又触发了一次同样的 accountsChanged（比如锁定/解锁），accounts[0] 没变
   expect(authApi.nonce).not.toHaveBeenCalled()
+  expect(toast.success).toHaveBeenCalledTimes(1) // 没有再多切一次
+})
+
+it('does not switch back on a duplicate accountsChanged event even if the session no longer matches (plugin selection did not really change)', async () => {
+  await loginWithOkx() // 会话 A
+  let handler: (accounts: string[]) => void = () => {}
+  vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
+    handler = cb
+    return () => {}
+  })
+  watchAccountChanges()
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  handler([ADDR_B]) // 插件真的切到了 B（首次事件按"变了"处理），自动签名登录
+  await vi.waitFor(() => expect(sessionToken()).toBe('tok-b'))
+  // 用户在系统内下拉切回 A（复用本机缓存，不经过插件），会话变成 A，插件本身还停在 B。
+  vi.mocked(authApi.me).mockResolvedValueOnce({ address: ADDR.toLowerCase(), role: 'admin' })
+  await runSwitchChain(ADDR)
+  expect(sessionToken()).toBe('tok')
+  vi.mocked(authApi.nonce).mockClear()
+  // 插件又触发了一次 accountsChanged（比如锁定/解锁），accounts[0] 还是 B，没有真的变——
+  // 即使跟当前会话（A）对不上，也不该被当成"插件切到了新账号"重新自动登录。
+  handler([ADDR_B])
+  expect(authApi.nonce).not.toHaveBeenCalled()
+  expect(sessionToken()).toBe('tok')
 })
 
 it('watchAccountChanges logs out when accountsChanged reports an empty list', async () => {

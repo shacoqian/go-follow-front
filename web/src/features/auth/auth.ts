@@ -4,7 +4,7 @@ import { ApiError } from '@/api/client'
 import { authApi } from '@/api/auth'
 import { toast } from '@/components/ui/toast'
 import { shortAddress } from '@/lib/format'
-import { isOkxInstalled, onAccountsChanged, personalSign, requestAccounts, waitForOkx } from '@/wallets/okx'
+import { isOkxInstalled, listAccounts, onAccountsChanged, personalSign, requestAccounts, waitForOkx } from '@/wallets/okx'
 import { clearAllSessions, clearSession, forgetSession, savedSession, useSession, type Session } from './session'
 
 // 用指定地址走一遍 SIWE 登录：取消息 → personal_sign(address) → verify → 存会话。
@@ -76,6 +76,23 @@ let chainBusy: Promise<void> | null = null
 // 不会因为发起方不同就漏掉。
 let pendingAccounts: string[] | null = null
 
+// chainBusy 的订阅者（AccountMenu 的 useSwitchBusy，用 useSyncExternalStore 接进 React）。
+// 只在 chainBusy 从有到无/从无到有那两个时刻通知一次，不是每次切换尝试都通知。
+const switchBusyListeners = new Set<() => void>()
+
+function notifySwitchBusy(): void {
+  for (const cb of switchBusyListeners) cb()
+}
+
+export function isSwitchBusy(): boolean {
+  return chainBusy !== null
+}
+
+export function subscribeSwitchBusy(cb: () => void): () => void {
+  switchBusyListeners.add(cb)
+  return () => switchBusyListeners.delete(cb)
+}
+
 // 多账号切换：优先复用本机缓存的会话，缓存不可用才重新签名登录；成功后清空查询缓存
 // （换账号不能看到上一个账号的数据）。签名被拒、插件只认当前选中账号、或缓存和签名都失败时，
 // resumeOrLogin/loginAs 会抛错，原样往上抛——会话和缓存都不动，调用方（runSwitchChain）负责
@@ -117,12 +134,16 @@ export async function runSwitchChain(
   // 平白多一次登出）。用 `chainBusy === chain`（而不是单独一个布尔值）判断"这次调用是不是
   // 归属者"：没抢到归属权的调用，chainBusy 从头到尾都不会等于它自己的 chain，天然被挡在
   // finally 的清理／补跑之外。
-  if (chainBusy === null) chainBusy = chain
+  if (chainBusy === null) {
+    chainBusy = chain
+    notifySwitchBusy()
+  }
   try {
     await chain
   } finally {
     if (chainBusy === chain) {
       chainBusy = null
+      notifySwitchBusy()
       // 整条链路（含失败分支里的 logout）都落定、chainBusy 也清掉之后才补跑，不然"先补跑 C、
       // C 刚登进去，随后才轮到的失败处理里的 logout() 又把 C 的会话一起清掉"这种错误顺序就会
       // 发生。
@@ -157,9 +178,18 @@ export async function logout(): Promise<void> {
 }
 
 // 动作签名：每次重新要挑战。后端在 409 时也会消耗挑战，缓存签名只会换来"挑战不存在"。
+// OKX 只会用它当前选中的账号签名——系统内下拉切换会话不经过插件，会话地址和插件当前选中
+// 账号完全可能对不上。发起签名前先 listAccounts()（不弹窗）确认一下：插件当前不是会话地址
+// 就直接抛错提示用户去 OKX 里切，不发起签名（不白白弹一次注定失败/文不对题的签名窗，也不
+// 白白消耗后端的挑战）。listAccounts() 返回空（未安装/未授权）时不拦——那种情况签名请求
+// 本身会在别处失败，走现有的错误提示。
 export async function signAction(action: string, params: Record<string, string>): Promise<string> {
   const s = useSession.getState().session
   if (!s) throw new Error('未登录')
+  const current = await listAccounts()
+  if (current.length > 0 && current[0].toLowerCase() !== s.address) {
+    throw new Error(`请在 OKX 里切到 ${shortAddress(getAddress(s.address))} 后重试`)
+  }
   const { message } = await authApi.action(action, params)
   // 会话里存的是小写地址，签名要用 checksum 形式，和登录时保持一致。
   return personalSign(message, getAddress(s.address))
@@ -187,21 +217,39 @@ export async function refreshMe(): Promise<boolean> {
   }
 }
 
-// 钱包切换账号：会话地址一旦不再出现在插件的已授权列表里，分两种情况——列表为空，说明本站
-// 被撤销授权/断开，只能登出；列表非空但不含会话地址，说明插件在别处切到了另一个账号，这时不必
-// 让用户跑回登录页再点一次，直接对新地址（eth_accounts[0]，插件当前选中项）重新签名登录
-// （switchAccount 内部会先试免签的缓存）。
-// 会话地址仍在列表里（不管它是不是插件当前选中项，管理授权/锁定解锁之类操作也会触发
-// accountsChanged 但顺序里第一项未必是会话地址）就什么都不做。
+// 插件当前选中账号（小写），供 handleAccountsChanged 判断"插件选中是不是真的变了"。
+// useOkxAccounts 首次 listAccounts() 之后、以及它自己的 accountsChanged 监听里都会调
+// notePluginAccounts 更新它；watchAccountChanges 每次处理事件（包括补跑锁存的事件）时
+// 也会通过 handleAccountsChanged 更新。页面刚加载/模块刚初始化时是 null。
+let pluginCurrent: string | null = null
+
+// hook 与 watcher 共同调用：只是记账，不触发任何切换/登出逻辑。
+export function notePluginAccounts(accounts: string[]): void {
+  pluginCurrent = accounts[0] ? accounts[0].toLowerCase() : null
+}
+
+// 钱包账号事件：分三种情况——
+//   1. accounts 为空：本站被撤销授权/断开，有会话就登出。
+//   2. accounts[0]（插件当前选中项）跟上一次记的 pluginCurrent 一样：插件选中账号没有真的变
+//      （锁定/解锁、单纯追加/撤销别的地址的授权等也会触发这个事件），不动会话——哪怕这时
+//      会话地址本来就跟 accounts[0] 不一致（比如用户刚在系统内下拉切到了另一个缓存的账号，
+//      插件还停在原地），也不该因为这类噪声事件被拽回去。
+//   3. 否则（插件选中真的变了）：会话地址跟新的 accounts[0] 不一样就自动对它重新签名登录/
+//      复用缓存（runSwitchChain，内部会先试免签的缓存）；一样就什么都不用做。
+// 页面刚加载、模块里还没有 pluginCurrent 时，按"变了"处理——这是唯一一种"当前会话地址
+// 不等于插件选中账号就自动切换"的默认行为，跟旧版本保持一致。
 function handleAccountsChanged(accounts: string[]): void {
+  const prev = pluginCurrent
+  notePluginAccounts(accounts)
   const s = useSession.getState().session
-  if (!s) return
-  const present = accounts.some((a) => a.toLowerCase() === s.address)
-  if (present) return
   if (accounts.length === 0) {
-    void logout()
+    if (s) void logout()
     return
   }
+  const nextLower = accounts[0].toLowerCase()
+  if (prev !== null && nextLower === prev) return
+  if (!s) return
+  if (nextLower === s.address) return
   const next = getAddress(accounts[0])
   void runSwitchChain(next, {
     onSuccess: () => toast.success(`已切换到 ${shortAddress(next)}`),

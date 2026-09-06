@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { getAddress } from 'viem'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { Select } from '@/components/ui/select'
@@ -18,6 +19,10 @@ export default function LoginPage() {
   const { accounts, current } = useOkxAccounts()
   const [selected, setSelected] = useState<string | null>(current)
   const hasAccounts = accounts.length > 0
+  // 下拉里选的账号和插件当前选中的不是同一个时，personal_sign 只会对插件当前选中的账号弹窗——
+  // 提前提示用户去 OKX 里切，跟 signAction 的提示是同一句文案。下拉只有插件当前一个选项时
+  // selected 恒等于 current，不会出现这条提示。
+  const mismatch = !!selected && !!current && selected.toLowerCase() !== current.toLowerCase()
 
   // 默认预选插件当前地址；accountsChanged 后如果原选择不在新列表里了，才改选新的 current
   // （仍然保留用户手动选的其它账号，不因为列表顺序变化就打断）。
@@ -81,6 +86,9 @@ export default function LoginPage() {
         <Button className="mt-6 w-full" onClick={hasAccounts ? onLoginAs : onConnect} disabled={busy || (hasAccounts && !selected)}>
           {busy ? '等待钱包签名…' : hasAccounts ? '以此账号登录' : '连接 OKX 并登录'}
         </Button>
+        {mismatch && (
+          <p className="mt-4 text-sm text-amber-700">{`请在 OKX 里切到 ${shortAddress(getAddress(selected!))} 后重试`}</p>
+        )}
         {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { listAccounts, onAccountsChanged, waitForOkx } from '@/wallets/okx'
+import { notePluginAccounts } from './auth'
 
 export interface OkxAccountsState {
   accounts: string[]
@@ -15,7 +16,11 @@ export function useOkxAccounts(): OkxAccountsState {
   const [accounts, setAccounts] = useState<string[]>([])
 
   const refresh = useCallback(async () => {
-    setAccounts(await listAccounts())
+    const next = await listAccounts()
+    setAccounts(next)
+    // 记一下插件当前选中账号（accounts[0]），auth.ts 的 handleAccountsChanged 用它判断插件
+    // 选中是不是真的变了。
+    notePluginAccounts(next)
   }, [])
 
   useEffect(() => {

@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
-vi.mock('./auth', () => ({ loginWithOkx: vi.fn(), loginAs: vi.fn() }))
+vi.mock('./auth', () => ({ loginWithOkx: vi.fn(), loginAs: vi.fn(), notePluginAccounts: vi.fn() }))
 vi.mock('@/wallets/okx', () => ({
   isOkxInstalled: vi.fn(() => true),
   waitForOkx: vi.fn(async () => true),
