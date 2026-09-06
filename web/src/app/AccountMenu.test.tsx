@@ -142,3 +142,13 @@ it('shows the backend message for an ApiError instead of the generic wallet-swit
   expect(await screen.findByText('账号已被管理员锁定')).toBeInTheDocument()
   expect(screen.queryByText('请在 OKX 里切到该账号后重试')).not.toBeInTheDocument()
 })
+
+it('shows the in-flight message verbatim instead of the generic wallet-switch copy', async () => {
+  vi.mocked(switchAccount).mockRejectedValueOnce(new Error('切换进行中，请稍候'))
+  renderMenu()
+  const select = await screen.findByLabelText('账号')
+  await userEvent.selectOptions(select, B)
+  expect(await screen.findByText('切换进行中，请稍候')).toBeInTheDocument()
+  expect(screen.queryByText('请在 OKX 里切到该账号后重试')).not.toBeInTheDocument()
+  await waitFor(() => expect(select).toHaveValue(A))
+})

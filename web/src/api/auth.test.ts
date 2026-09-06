@@ -32,4 +32,9 @@ describe('authApi / healthApi', () => {
       ['GET', '/health'],
     ])
   })
+  it('me forwards a token override to request (resumeOrLogin validates a cached session)', async () => {
+    req.mockResolvedValue({ address: '0xabc', role: 'user' })
+    await authApi.me({ token: 'cached-tok' })
+    expect(req).toHaveBeenCalledWith('GET', '/auth/me', undefined, { token: 'cached-tok' })
+  })
 })

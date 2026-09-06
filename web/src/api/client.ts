@@ -24,6 +24,14 @@ export function configureClient(opts: { token: () => string | null; onUnauthoriz
   unauthorized = opts.onUnauthorized
 }
 
+export interface RequestOpts {
+  timeoutMs?: number
+  // 用指定 token 代替 tokenSource() 发这一次请求——校验一个还没 setSession 的候选会话
+  // （resumeOrLogin 拿缓存的 token 探一下 /auth/me）时用，不代表当前会话。带这个字段时
+  // 401 不触发 onUnauthorized：那只是说明这个候选会话不能用，不是当前会话失效了。
+  token?: string
+}
+
 export function messageFor(status: number, backendMessage: string): string {
   switch (status) {
     case 401:
@@ -49,11 +57,12 @@ export async function requestFull<T>(
   method: Method,
   path: string,
   body?: unknown,
-  opts?: { timeoutMs?: number },
+  opts?: RequestOpts,
 ): Promise<Reply<T>> {
   const headers: Record<string, string> = {}
   if (body !== undefined) headers['Content-Type'] = 'application/json'
-  const token = tokenSource()
+  const hasTokenOverride = opts?.token !== undefined
+  const token = hasTokenOverride ? opts!.token : tokenSource()
   if (token) headers.Authorization = `Bearer ${token}`
 
   const ac = new AbortController()
@@ -90,10 +99,10 @@ export async function requestFull<T>(
     data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string'
       ? (data as { error: string }).error
       : ''
-  if (res.status === 401) unauthorized()
+  if (res.status === 401 && !hasTokenOverride) unauthorized()
   throw new ApiError(res.status, messageFor(res.status, backendMessage), data ?? undefined)
 }
 
-export async function request<T>(method: Method, path: string, body?: unknown, opts?: { timeoutMs?: number }): Promise<T> {
+export async function request<T>(method: Method, path: string, body?: unknown, opts?: RequestOpts): Promise<T> {
   return (await requestFull<T>(method, path, body, opts)).data
 }

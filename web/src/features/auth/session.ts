@@ -31,9 +31,28 @@ export const useSession = create<SessionState>()(
           // 不动 saved——不然别的地址切回来的时候还没登出就白白丢了免签的机会。
           saved: session ? { ...st.saved, [session.address]: session } : st.saved,
         })),
-      setRole: (role) => set((st) => (st.session ? { session: { ...st.session, role } } : st)),
+      setRole: (role) =>
+        set((st) => {
+          if (!st.session) return st
+          const session = { ...st.session, role }
+          // 顺手把缓存里那份也更新了——不然切别的地址、再切回来时，命中的缓存还是旧 role。
+          const saved = st.saved[session.address] ? { ...st.saved, [session.address]: session } : st.saved
+          return { session, saved }
+        }),
     }),
-    { name: 'gofollow.session', storage: createJSONStorage(() => localStorage) },
+    {
+      name: 'gofollow.session',
+      storage: createJSONStorage(() => localStorage),
+      // 本地存的缓存可能是几天前的：启动时把已经过期的清掉，免得 savedSession 每次都白查一遍
+      // （sessionValid 是下面的函数声明，会被提升，这里能直接用）。
+      onRehydrateStorage: () => (state) => {
+        if (!state) return
+        const alive = Object.fromEntries(Object.entries(state.saved).filter(([, s]) => sessionValid(s)))
+        if (Object.keys(alive).length !== Object.keys(state.saved).length) {
+          useSession.setState({ saved: alive })
+        }
+      },
+    },
   ),
 )
 

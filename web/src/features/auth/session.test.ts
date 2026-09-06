@@ -86,3 +86,31 @@ it('loads old persisted data that has no saved field without throwing', async ()
   expect(useSession.getState().saved).toEqual({})
   expect(savedSession('0xabc')).toBeNull()
 })
+
+it('setRole mirrors the role change into the saved copy for the current address', () => {
+  put(new Date(Date.now() + 60_000).toISOString(), '0xabc')
+  useSession.getState().setRole('admin')
+  expect(useSession.getState().session?.role).toBe('admin')
+  expect(useSession.getState().saved['0xabc']?.role).toBe('admin')
+})
+
+it('prunes expired saved sessions on rehydrate, keeping the still-valid ones', async () => {
+  const validExp = new Date(Date.now() + 60_000).toISOString()
+  const expiredExp = new Date(Date.now() - 1000).toISOString()
+  localStorage.setItem(
+    'gofollow.session',
+    JSON.stringify({
+      state: {
+        session: null,
+        saved: {
+          '0xabc': { token: 'still-good', address: '0xabc', role: 'user', expiresAt: validExp },
+          '0xdef': { token: 'stale', address: '0xdef', role: 'user', expiresAt: expiredExp },
+        },
+      },
+      version: 0,
+    }),
+  )
+  await useSession.persist.rehydrate()
+  expect(useSession.getState().saved['0xdef']).toBeUndefined()
+  expect(useSession.getState().saved['0xabc']?.token).toBe('still-good')
+})

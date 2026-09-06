@@ -40,9 +40,17 @@ export default function AccountMenu() {
     meta: { silent: true },
     onSuccess: () => toast.success('已切换账号'),
     onError: (err) => {
-      // 后端明确拒绝（账号被锁定、限流等）展示后端原话；签名被拒/插件只认当前账号这类钱包侧
-      // 失败没有具体后端消息，用设计稿里给的固定文案。
-      toast.error(err instanceof ApiError ? err.message : '请在 OKX 里切到该账号后重试')
+      // 后端明确拒绝（账号被锁定、限流等）展示后端原话；已经有一个切换在跑（比如手快点了两下，
+      // 或者插件自动切换和手动切换撞车）展示那句提示；签名被拒/插件只认当前账号这类钱包侧失败
+      // 没有具体后端消息，用设计稿里给的固定文案。
+      const inFlightMessage = '切换进行中，请稍候'
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error && err.message === inFlightMessage
+            ? err.message
+            : '请在 OKX 里切到该账号后重试'
+      toast.error(message)
       setValue(session?.address ?? '')
     },
   })

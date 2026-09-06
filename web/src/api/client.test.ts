@@ -84,6 +84,19 @@ describe('request', () => {
     await assertion
     vi.useRealTimers()
   })
+
+  it('uses opts.token instead of the configured token source when provided', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, {}))
+    await request('GET', '/auth/me', undefined, { token: 'cached-tok' })
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init.headers.Authorization).toBe('Bearer cached-tok')
+  })
+
+  it('does not call onUnauthorized on a 401 when a token override was used', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(401, { error: '未登录' }))
+    await expect(request('GET', '/auth/me', undefined, { token: 'cached-tok' })).rejects.toMatchObject({ status: 401 })
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
 })
 
 describe('messageFor', () => {
