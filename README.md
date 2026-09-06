@@ -21,3 +21,13 @@ uri = "http://follow.example.com:8080"   # 前端对外完整地址
 ```
 
 前端服务环境变量：`LISTEN`（默认 `0.0.0.0:8080`）、`GOFOLLOW_URL`（默认 `http://127.0.0.1:8090`）。第一版只做 HTTP。
+
+## 开发
+
+```bash
+cd web && npm install
+npm run dev        # http://127.0.0.1:5173，/api 反代到本机 gofollow(:8090)
+npm test           # vitest（watch）；CI 用 npm test -- --run
+npm run typecheck
+npm run build      # 产物在 web/dist
+```
