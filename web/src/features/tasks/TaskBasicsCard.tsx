@@ -9,9 +9,19 @@ import { useInvalidateTargets, useTargets } from '@/features/targets/useTargets'
 import { CreateWalletDialog } from '@/features/wallets/CreateWalletDialog'
 import { useInvalidateWallets, useWallets } from '@/features/wallets/useWallets'
 
+type Created = { id: number; address: string }
+type Option = { value: string; label: string }
+
 // 目标/钱包都按「标签 + 短地址」显示，下拉选项和只读文案共用一份写法。
 function displayName(x: { label: string; address: string }): string {
   return `${x.label || '（未命名）'} ${shortAddress(x.address)}`
+}
+
+// 对话框关得比列表重取快：这中间 <select value={新 id}> 找不到匹配 option，
+// 浏览器会退回第一项（请选择），看着像"白创建了"。用接口返回的地址先补一个选项顶住，
+// 重取回来后列表里已经有它了，pending 自然失效（调用方传 null），不需要 effect 去清。
+function optionsWith(options: Option[], pending: Created | null): Option[] {
+  return pending ? [...options, { value: String(pending.id), label: shortAddress(pending.address) }] : options
 }
 
 /**
@@ -33,20 +43,35 @@ export function TaskBasicsCard({
 }) {
   const [addTargetOpen, setAddTargetOpen] = useState(false)
   const [addWalletOpen, setAddWalletOpen] = useState(false)
+  // 内联创建刚拿到的 id/地址：列表失效重取还在路上时先顶上，见下面 optionsWith 的说明。
+  const [pendingTarget, setPendingTarget] = useState<Created | null>(null)
+  const [pendingWallet, setPendingWallet] = useState<Created | null>(null)
 
   const { data: targets, isLoading: targetsLoading } = useTargets()
   const { data: wallets, isLoading: walletsLoading } = useWallets()
   const invalidateTargets = useInvalidateTargets()
   const invalidateWallets = useInvalidateWallets()
 
-  const target = (targets ?? []).find((t) => t.id === targetId)
+  const targetList = targets ?? []
+  const walletList = wallets ?? []
+  const target = targetList.find((t) => t.id === targetId)
   // 余额与只读文案在全量钱包里找：任务用的钱包可能已停用，仍要显示得出来。
-  const wallet = (wallets ?? []).find((w) => w.id === walletId)
+  const wallet = walletList.find((w) => w.id === walletId)
   const loading = targetsLoading || walletsLoading
 
+  // 钱包还没回来时不留空：先显示占位，别让余额行一闪一闪。
   const balanceLine = wallet
     ? `余额 ${unitsToUsdg(wallet.usdg_balance)} USDG / ${weiToEth(wallet.eth_balance)} ETH`
-    : ''
+    : '余额 —'
+
+  const targetOptions = optionsWith(
+    targetList.map((t) => ({ value: String(t.id), label: displayName(t) })),
+    targetList.some((t) => t.id === pendingTarget?.id) ? null : pendingTarget,
+  )
+  const walletOptions = optionsWith(
+    walletList.filter((w) => w.status === 'active').map((w) => ({ value: String(w.id), label: displayName(w) })),
+    walletList.some((w) => w.id === pendingWallet?.id) ? null : pendingWallet,
+  )
 
   return (
     <section className="space-y-4 rounded-lg border border-slate-200 p-4">
@@ -71,10 +96,7 @@ export function TaskBasicsCard({
                   id="target"
                   value={targetId == null ? '' : String(targetId)}
                   onChange={(e) => e.target.value && onTargetChange?.(Number(e.target.value))}
-                  options={[
-                    { value: '', label: '请选择' },
-                    ...(targets ?? []).map((t) => ({ value: String(t.id), label: displayName(t) })),
-                  ]}
+                  options={[{ value: '', label: '请选择' }, ...targetOptions]}
                 />
               </Field>
             </div>
@@ -90,12 +112,7 @@ export function TaskBasicsCard({
                   id="wallet"
                   value={walletId == null ? '' : String(walletId)}
                   onChange={(e) => e.target.value && onWalletChange?.(Number(e.target.value))}
-                  options={[
-                    { value: '', label: '请选择' },
-                    ...(wallets ?? [])
-                      .filter((w) => w.status === 'active')
-                      .map((w) => ({ value: String(w.id), label: displayName(w) })),
-                  ]}
+                  options={[{ value: '', label: '请选择' }, ...walletOptions]}
                 />
               </Field>
             </div>
@@ -104,7 +121,7 @@ export function TaskBasicsCard({
             </Button>
           </div>
 
-          {wallet && <p className="text-sm text-slate-600">{balanceLine}</p>}
+          {walletId != null && <p className="text-sm text-slate-600">{balanceLine}</p>}
         </div>
       )}
 
@@ -115,7 +132,10 @@ export function TaskBasicsCard({
           onSaved={(r) => {
             invalidateTargets()
             // 新建才有结果：顺手选中，省得用户回下拉里再找一次。
-            if (r) onTargetChange?.(r.id)
+            if (r) {
+              setPendingTarget(r)
+              onTargetChange?.(r.id)
+            }
           }}
         />
       )}
@@ -125,6 +145,7 @@ export function TaskBasicsCard({
           onOpenChange={setAddWalletOpen}
           onCreated={(r) => {
             invalidateWallets()
+            setPendingWallet(r)
             onWalletChange?.(r.id)
           }}
         />
