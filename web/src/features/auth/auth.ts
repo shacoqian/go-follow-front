@@ -85,12 +85,6 @@ export async function switchAccount(address: string): Promise<void> {
     await run
   } finally {
     inFlight = null
-    // 先清 inFlight 再补跑，不然补跑里如果又要 switchAccount 会被自己刚设的锁挡住。
-    if (pendingAccounts) {
-      const latched = pendingAccounts
-      pendingAccounts = null
-      handleAccountsChanged(latched)
-    }
   }
 }
 
@@ -163,10 +157,24 @@ function handleAccountsChanged(accounts: string[]): void {
   }
   const next = getAddress(accounts[0])
   void switchAccount(next)
-    .then(() => toast.success(`已切换到 ${shortAddress(next)}`))
+    .then(() => {
+      toast.success(`已切换到 ${shortAddress(next)}`)
+    })
     .catch(() => {
+      // 失败要先登出（回登录页），失败提示和"回登录页"是一件事，不能被后面补跑的切换打断。
       toast.error('切换账号失败，请重新登录')
-      void logout()
+      return logout()
+    })
+    .then(() => {
+      // 这次切换——不管成功、还是失败后先 logout() 收尾——彻底跑完了，再看看跑的时候有没有
+      // 锁存下来的新事件，有就补一次。故意放在 switchAccount 自己的 finally 之外、等这整条
+      // 链路（含失败时的 logout）都落定之后才做：不然失败分支里"先补跑 C、C 刚登进去，随后
+      // 才轮到的 logout() 又把 C 的会话一起清掉"这种错误顺序就会发生。
+      if (pendingAccounts) {
+        const latched = pendingAccounts
+        pendingAccounts = null
+        handleAccountsChanged(latched)
+      }
     })
 }
 

@@ -94,7 +94,7 @@ it('setRole mirrors the role change into the saved copy for the current address'
   expect(useSession.getState().saved['0xabc']?.role).toBe('admin')
 })
 
-it('prunes expired saved sessions on rehydrate, keeping the still-valid ones', async () => {
+it('prunes expired saved sessions at startup — a fresh module hydrating from localStorage', async () => {
   const validExp = new Date(Date.now() + 60_000).toISOString()
   const expiredExp = new Date(Date.now() - 1000).toISOString()
   localStorage.setItem(
@@ -110,7 +110,13 @@ it('prunes expired saved sessions on rehydrate, keeping the still-valid ones', a
       version: 0,
     }),
   )
-  await useSession.persist.rehydrate()
-  expect(useSession.getState().saved['0xdef']).toBeUndefined()
-  expect(useSession.getState().saved['0xabc']?.token).toBe('still-good')
+  // 真正会踩坑的是冷启动那次同步 hydrate（在 create() 内部完成，不是这个文件顶部早就
+  // 初始化好的 useSession），所以这里强制重新加载模块，而不是调用已经在跑的 store 的
+  // .rehydrate()——那只是重新走一遍 merge，测不出"合并回调里引用 useSession 触发 TDZ"这类
+  // 只在首次同步 hydrate 时才会发生的问题。
+  vi.resetModules()
+  const fresh = await import('./session')
+  expect(fresh.useSession.persist.hasHydrated()).toBe(true)
+  expect(fresh.useSession.getState().saved['0xdef']).toBeUndefined()
+  expect(fresh.useSession.getState().saved['0xabc']?.token).toBe('still-good')
 })

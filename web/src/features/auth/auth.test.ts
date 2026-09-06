@@ -1,3 +1,4 @@
+import { getAddress } from 'viem'
 import { ApiError } from '@/api/client'
 import type { VerifyResponse } from '@/api/types'
 
@@ -162,6 +163,7 @@ it('watchAccountChanges logs out when accountsChanged reports an empty list', as
 
 it('watchAccountChanges ignores accountsChanged events fired while switchAccount is in flight', async () => {
   await loginWithOkx()
+  vi.mocked(authApi.nonce).mockClear()
   let handler: (accounts: string[]) => void = () => {}
   vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
     handler = cb
@@ -170,13 +172,15 @@ it('watchAccountChanges ignores accountsChanged events fired while switchAccount
   watchAccountChanges()
   let resolveVerify: (v: VerifyResponse) => void = () => {}
   vi.mocked(authApi.verify).mockReturnValueOnce(new Promise((resolve) => { resolveVerify = resolve }))
-  const switching = switchAccount(ADDR_B)
-  // 插件在切换过程中自己也会连着触发 accountsChanged，此时事件应该被忽略，不能把还没换完的会话登出。
+  handler([ADDR_B]) // 触发切到 B，卡在 verify 没回
+  // 插件在切换过程中自己也会连着触发同一个 accountsChanged，此时事件应该被锁存（而不是立刻拿去
+  // 再跑一次 switchAccount，那样会撞上"切换进行中"直接被拒），不能把还没换完的会话登出。
   handler([ADDR_B])
   expect(sessionToken()).toBe('tok')
   resolveVerify({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
-  await switching
-  expect(sessionToken()).toBe('tok-b')
+  await vi.waitFor(() => expect(sessionToken()).toBe('tok-b'))
+  // 锁存的那次补跑后，accounts 已经等于当前会话地址，present 检查直接短路，不会再触发一轮切换。
+  await vi.waitFor(() => expect(authApi.nonce).toHaveBeenCalledTimes(1))
 })
 
 it('logout does not clobber a session that was replaced while awaiting the API', async () => {
@@ -388,4 +392,31 @@ it('refreshMe forgets the current address\'s saved session on a 403', async () =
   await expect(refreshMe()).resolves.toBe(false)
   expect(sessionToken()).toBeNull()
   expect(useSession.getState().saved[ADDR.toLowerCase()]).toBeUndefined()
+})
+
+it('does not act on a latched event until the failed switch has already logged out (no half-baked login as C)', async () => {
+  await loginWithOkx() // 会话 A
+  vi.mocked(authApi.nonce).mockClear()
+  const ADDR_C = '0xabcdef1234567890abcdef1234567890abcdef12'
+  let handler: (accounts: string[]) => void = () => {}
+  vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
+    handler = cb
+    return () => {}
+  })
+  watchAccountChanges()
+  vi.mocked(okx.personalSign).mockRejectedValueOnce(new Error('用户拒绝签名')) // 切到 B 的签名会失败
+  handler([ADDR_B]) // 触发切到 B
+  handler([ADDR_C]) // 切换进行中插件又冒出了 C——这次事件先被锁存
+  await vi.waitFor(() => expect(sessionToken()).toBeNull())
+  // 给补跑（如果错误地发生了）留够时间跑完它自己的异步链路，再做断言。
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  // 失败先登出（清空会话和全部缓存），锁存的 C 是在 logout() 彻底跑完之后才补跑的——这时
+  // handleAccountsChanged 一看会话已经是空的就直接不动了，不会顺着 C 再签一次名登进去，
+  // 更不会出现"提示要重新登录，其实已经悄悄用 C 登进去了"这种半吊子状态。只有 B 那一次
+  // 签名尝试，checksum(C) 一次都不该出现在 nonce 的调用参数里。
+  expect(authApi.nonce).toHaveBeenCalledTimes(1)
+  expect(authApi.nonce).toHaveBeenCalledWith(ADDR_B)
+  expect(authApi.nonce).not.toHaveBeenCalledWith(getAddress(ADDR_C))
+  expect(useSession.getState().session).toBeNull()
+  expect(useSession.getState().saved).toEqual({})
 })

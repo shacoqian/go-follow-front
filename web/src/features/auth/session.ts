@@ -43,14 +43,16 @@ export const useSession = create<SessionState>()(
     {
       name: 'gofollow.session',
       storage: createJSONStorage(() => localStorage),
-      // 本地存的缓存可能是几天前的：启动时把已经过期的清掉，免得 savedSession 每次都白查一遍
-      // （sessionValid 是下面的函数声明，会被提升，这里能直接用）。
-      onRehydrateStorage: () => (state) => {
-        if (!state) return
-        const alive = Object.fromEntries(Object.entries(state.saved).filter(([, s]) => sessionValid(s)))
-        if (Object.keys(alive).length !== Object.keys(state.saved).length) {
-          useSession.setState({ saved: alive })
-        }
+      // 本地存的缓存可能是几天前的：启动时把已经过期的清掉，免得 savedSession 每次都白查一遍。
+      // 不能用 onRehydrateStorage：zustand 对同步 storage（localStorage）是在 create() 内部
+      // 同步完成整条 hydrate 链的，这时 `useSession` 这个 const 绑定还没赋值完（TDZ），
+      // 回调里一引用就扔 ReferenceError——外层链路会把它当成 hydrate 失败悄悄吞掉，
+      // hasHydrated() 永远是 false，清理也永远不会跑。merge 是纯函数，不用碰 `useSession`，
+      // 拿到手的 persisted/current 直接算就行，没有这个问题（pruneExpired/sessionValid 都是
+      // 下面的函数声明，会被提升，这里能直接用）。
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<SessionState>
+        return { ...current, ...p, saved: pruneExpired(p.saved ?? {}) }
       },
     },
   ),
@@ -63,6 +65,11 @@ export function sessionValid(s: Session | null): boolean {
   const exp = Date.parse(s.expiresAt)
   if (Number.isNaN(exp)) return true
   return exp > Date.now()
+}
+
+// 过滤掉已经过期的缓存条目，纯函数，merge 里用（不碰 useSession，见上面的注释）。
+function pruneExpired(saved: Record<string, Session>): Record<string, Session> {
+  return Object.fromEntries(Object.entries(saved).filter(([, s]) => sessionValid(s)))
 }
 
 export function sessionToken(): string | null {
