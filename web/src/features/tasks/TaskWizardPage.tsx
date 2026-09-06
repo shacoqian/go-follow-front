@@ -140,13 +140,15 @@ export default function TaskWizardPage() {
         />
       )}
 
-      <TargetDialog
-        open={addTargetOpen}
-        onOpenChange={setAddTargetOpen}
-        onSaved={() => {
-          invalidateTargets()
-        }}
-      />
+      {addTargetOpen && (
+        <TargetDialog
+          open={addTargetOpen}
+          onOpenChange={setAddTargetOpen}
+          onSaved={() => {
+            invalidateTargets()
+          }}
+        />
+      )}
     </div>
   )
 }

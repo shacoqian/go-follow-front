@@ -37,6 +37,12 @@ it('rejects invalid inputs with Chinese messages', () => {
   expect(strategySchema.safeParse({ ...defaultStrategy, token_blacklist: 'nope' }).error?.issues[0].message).toBe('黑名单第 1 行不是合法地址')
 })
 
+it('reports a Chinese message for non-numeric number fields', () => {
+  const bad = strategySchema.safeParse({ ...defaultStrategy, slippage_pct: NaN })
+  expect(bad.success).toBe(false)
+  expect(bad.error?.issues[0].message).toBe('请输入数字')
+})
+
 it('checks percent-to-bps rounding edge cases', () => {
   expect(strategySchema.safeParse({ ...defaultStrategy, stop_loss_pct: 99.999 }).error?.issues[0].message).toBe('止损比例须小于 100')
   expect(strategySchema.safeParse({ ...defaultStrategy, slippage_pct: 0.001 }).error?.issues[0].message).toBe('滑点须在 0–100 之间')

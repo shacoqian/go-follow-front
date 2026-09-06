@@ -6,7 +6,7 @@ import { Select } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
-import { PLATFORMS, QUOTE_ASSETS, strategySchema, type StrategyValues } from './strategySchema'
+import { PLATFORMS, QUOTE_ASSETS, defaultStrategy, strategySchema, type StrategyValues } from './strategySchema'
 
 const SIZE_MODE_OPTIONS = [
   { value: 'fixed', label: '固定金额' },
@@ -25,6 +25,8 @@ const SELL_MODE_HINT: Record<StrategyValues['sell_mode'], string> = {
   all: '全部 = 目标一卖我们全清',
 }
 
+const SELL_MODE_SENTENCE = Object.values(SELL_MODE_HINT).join('；')
+
 export function StrategyForm({
   defaultValues,
   submitText,
@@ -40,7 +42,6 @@ export function StrategyForm({
   const { register, control, watch } = form
   const { errors } = form.formState
   const sizeMode = watch('size_mode')
-  const sellMode = watch('sell_mode')
   const tpEnabled = watch('tp_enabled')
 
   return (
@@ -76,12 +77,24 @@ export function StrategyForm({
         <Field label="卖出模式" htmlFor="sell_mode">
           <Select id="sell_mode" options={SELL_MODE_OPTIONS} {...register('sell_mode')} />
         </Field>
-        <p className="text-xs text-slate-500">{SELL_MODE_HINT[sellMode]}</p>
+        <p className="text-xs text-slate-500">{SELL_MODE_SENTENCE}</p>
       </section>
 
       <section className="space-y-3 rounded-md border border-slate-200 p-4">
         <h2 className="text-sm font-semibold text-slate-700">止盈止损</h2>
-        <Checkbox label="开启止盈止损" {...register('tp_enabled')} />
+        <Checkbox
+          label="开启止盈止损"
+          {...register('tp_enabled', {
+            onChange: (e) => {
+              if (!e.target.checked) {
+                form.setValue('take_profit_pct', defaultStrategy.take_profit_pct, { shouldValidate: false })
+                form.setValue('take_profit_sell_pct', defaultStrategy.take_profit_sell_pct, { shouldValidate: false })
+                form.setValue('stop_loss_pct', defaultStrategy.stop_loss_pct, { shouldValidate: false })
+                form.setValue('max_hold_min', defaultStrategy.max_hold_min, { shouldValidate: false })
+              }
+            },
+          })}
+        />
         {tpEnabled && (
           <>
             <Field label="止盈（%）" htmlFor="take_profit_pct" error={errors.take_profit_pct?.message}>
@@ -121,11 +134,12 @@ export function StrategyForm({
                     key={p.value}
                     label={p.label}
                     checked={field.value.includes(p.value)}
-                    onChange={(e) =>
-                      field.onChange(
-                        e.target.checked ? [...field.value, p.value] : field.value.filter((v) => v !== p.value),
-                      )
-                    }
+                    onChange={(e) => {
+                      const next = new Set(field.value)
+                      if (e.target.checked) next.add(p.value)
+                      else next.delete(p.value)
+                      field.onChange(PLATFORMS.filter((x) => next.has(x.value)).map((x) => x.value))
+                    }}
                   />
                 ))}
               </div>
@@ -143,11 +157,12 @@ export function StrategyForm({
                     key={q.value}
                     label={q.label}
                     checked={field.value.includes(q.value)}
-                    onChange={(e) =>
-                      field.onChange(
-                        e.target.checked ? [...field.value, q.value] : field.value.filter((v) => v !== q.value),
-                      )
-                    }
+                    onChange={(e) => {
+                      const next = new Set(field.value)
+                      if (e.target.checked) next.add(q.value)
+                      else next.delete(q.value)
+                      field.onChange(QUOTE_ASSETS.filter((x) => next.has(x.value)).map((x) => x.value))
+                    }}
                   />
                 ))}
               </div>

@@ -26,3 +26,17 @@ it('submits defaults, toggles ratio label and take-profit block, shows validatio
   expect(await screen.findByText('滑点须在 0–100 之间')).toBeInTheDocument()
   expect(onSubmit).toHaveBeenCalledTimes(1)
 })
+
+it('resets hidden take-profit fields to defaults when tp is disabled again', async () => {
+  const onSubmit = vi.fn()
+  render(<StrategyForm defaultValues={defaultStrategy} submitText="创建" onSubmit={onSubmit} />)
+
+  await userEvent.click(screen.getByLabelText('开启止盈止损'))
+  const tpSell = screen.getByLabelText('止盈卖出比例（%）')
+  await userEvent.clear(tpSell)
+  await userEvent.click(screen.getByLabelText('开启止盈止损'))
+  expect(screen.queryByLabelText('止盈卖出比例（%）')).not.toBeInTheDocument()
+
+  await userEvent.click(screen.getByRole('button', { name: '创建' }))
+  expect(onSubmit).toHaveBeenCalledWith(defaultStrategy)
+})

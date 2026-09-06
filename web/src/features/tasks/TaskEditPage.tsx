@@ -12,7 +12,7 @@ import { useInvalidateTasks, useTasks } from './useTasks'
 export default function TaskEditPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data: tasks } = useTasks()
+  const { data: tasks, isLoading: tasksLoading } = useTasks()
   const { data: targets } = useTargets()
   const { data: wallets } = useWallets()
   const invalidateTasks = useInvalidateTasks()
@@ -29,6 +29,10 @@ export default function TaskEditPage() {
       navigate('/tasks')
     },
   })
+
+  if (tasksLoading) {
+    return <p className="text-sm text-slate-500">加载中…</p>
+  }
 
   if (!task) {
     return <p className="text-sm text-slate-500">任务不存在</p>

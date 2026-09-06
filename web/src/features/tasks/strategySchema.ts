@@ -42,24 +42,24 @@ export const strategySchema = z
     max_per_trade: amount,
     min_target_trade: amount,
     spend_limit: amount,
-    max_addon_per_token: z.number().int().min(1, '至少 1 次'),
+    max_addon_per_token: z.number({ error: '请输入数字' }).int().min(1, '至少 1 次'),
     sell_mode: z.enum(['manual', 'proportional', 'all']),
     tp_enabled: z.boolean(),
-    take_profit_pct: z.number().min(0),
+    take_profit_pct: z.number({ error: '请输入数字' }).min(0),
     take_profit_sell_pct: z
-      .number()
+      .number({ error: '请输入数字' })
       .min(0.01, '止盈卖出比例须在 0.01–100')
       .max(100, '止盈卖出比例须在 0.01–100'),
-    stop_loss_pct: z.number().min(0).lt(100, '止损比例须小于 100'),
-    max_hold_min: z.number().int().min(0),
+    stop_loss_pct: z.number({ error: '请输入数字' }).min(0).lt(100, '止损比例须小于 100'),
+    max_hold_min: z.number({ error: '请输入数字' }).int().min(0),
     platforms: z.array(z.string()).min(1, '至少选一个场所'),
     quote_assets: z.array(z.string()).min(1, '至少选一种计价币'),
     follow_curve: z.boolean(),
-    max_creator_tax_pct: z.number().min(0).max(100),
-    skip_launch_window_sec: z.number().int().min(0),
-    max_chase_pct: z.number().min(0),
-    slippage_pct: z.number().gt(0, '滑点须在 0–100 之间').lt(100, '滑点须在 0–100 之间'),
-    retry_max: z.number().int().min(0),
+    max_creator_tax_pct: z.number({ error: '请输入数字' }).min(0).max(100),
+    skip_launch_window_sec: z.number({ error: '请输入数字' }).int().min(0),
+    max_chase_pct: z.number({ error: '请输入数字' }).min(0),
+    slippage_pct: z.number({ error: '请输入数字' }).gt(0, '滑点须在 0–100 之间').lt(100, '滑点须在 0–100 之间'),
+    retry_max: z.number({ error: '请输入数字' }).int().min(0),
     token_blacklist: z.string(),
   })
   .superRefine((v, ctx) => {
