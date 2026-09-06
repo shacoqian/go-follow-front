@@ -14,7 +14,7 @@ vi.mock('@/api/auth', () => ({
 import { queryClient } from '@/app/queryClient'
 import { authApi } from '@/api/auth'
 import * as okx from '@/wallets/okx'
-import { loginWithOkx, logout, refreshMe, signAction, watchAccountChanges } from './auth'
+import { loginAs, loginWithOkx, logout, refreshMe, signAction, switchAccount, watchAccountChanges } from './auth'
 import { clearSession, sessionToken, useSession } from './session'
 
 const ADDR = '0x8ba1f109551bD432803012645Ac136ddd64DBA72'
@@ -103,4 +103,36 @@ it('watchAccountChanges logs out when the wallet switches to another address', a
   handler(['0x0000000000000000000000000000000000000001'])
   await vi.waitFor(() => expect(sessionToken()).toBeNull())
   expect(sessionToken()).toBeNull()
+})
+
+const ADDR_B = '0x1234567890123456789012345678901234567890'
+
+it('loginAs signs in with the given address without calling requestAccounts', async () => {
+  const s = await loginAs(ADDR_B)
+  expect(okx.requestAccounts).not.toHaveBeenCalled()
+  expect(authApi.nonce).toHaveBeenCalledWith(ADDR_B)
+  expect(okx.personalSign).toHaveBeenCalledWith('siwe-message', ADDR_B)
+  expect(authApi.verify).toHaveBeenCalledWith(ADDR_B, '0xsig')
+  expect(s.address).toBe(ADDR.toLowerCase())
+})
+
+it('switchAccount logs in as the new address and clears the query cache', async () => {
+  await loginWithOkx()
+  const clear = vi.spyOn(queryClient, 'clear')
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok2', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  await switchAccount(ADDR_B)
+  expect(authApi.nonce).toHaveBeenLastCalledWith(ADDR_B)
+  expect(useSession.getState().session?.address).toBe(ADDR_B.toLowerCase())
+  expect(clear).toHaveBeenCalledTimes(1)
+  clear.mockRestore()
+})
+
+it('switchAccount leaves the session untouched when signing fails', async () => {
+  await loginWithOkx()
+  const clear = vi.spyOn(queryClient, 'clear')
+  vi.mocked(okx.personalSign).mockRejectedValueOnce(new Error('用户拒绝签名'))
+  await expect(switchAccount(ADDR_B)).rejects.toThrow('用户拒绝签名')
+  expect(useSession.getState().session?.address).toBe(ADDR.toLowerCase())
+  expect(clear).not.toHaveBeenCalled()
+  clear.mockRestore()
 })

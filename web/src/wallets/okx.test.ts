@@ -1,4 +1,14 @@
-import { isOkxInstalled, okxProvider, onAccountsChanged, personalSign, requestAccounts, waitForOkx } from './okx'
+import {
+  isOkxInstalled,
+  listAccounts,
+  okxProvider,
+  onAccountsChanged,
+  personalSign,
+  requestAccounts,
+  requestPermissions,
+  supportsRequestPermissions,
+  waitForOkx,
+} from './okx'
 
 const ADDR = '0x8ba1f109551bD432803012645Ac136ddd64DBA72'
 
@@ -75,4 +85,54 @@ it('onAccountsChanged subscribes and the returned function unsubscribes', () => 
   off()
   fake.emit('accountsChanged', ['0x2'])
   expect(cb).toHaveBeenCalledTimes(1)
+})
+
+it('listAccounts returns [] when the wallet is not installed', async () => {
+  await expect(listAccounts()).resolves.toEqual([])
+})
+
+it('listAccounts returns checksummed addresses without prompting', async () => {
+  const fake = installFake()
+  fake.request.mockResolvedValue([ADDR.toLowerCase()])
+  await expect(listAccounts()).resolves.toEqual([ADDR])
+  expect(fake.request).toHaveBeenCalledWith({ method: 'eth_accounts' })
+})
+
+it('listAccounts returns [] when the provider call fails', async () => {
+  const fake = installFake()
+  fake.request.mockRejectedValue(new Error('boom'))
+  await expect(listAccounts()).resolves.toEqual([])
+})
+
+it('requestPermissions resolves true on success', async () => {
+  const fake = installFake()
+  fake.request.mockResolvedValue(undefined)
+  await expect(requestPermissions()).resolves.toBe(true)
+  expect(fake.request).toHaveBeenCalledWith({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] })
+})
+
+it('requestPermissions resolves false when the wallet does not support it', async () => {
+  const fake = installFake()
+  fake.request.mockRejectedValueOnce({ code: 4200, message: 'method not supported' })
+  await expect(requestPermissions()).resolves.toBe(false)
+  fake.request.mockRejectedValueOnce({ code: -32601, message: 'not found' })
+  await expect(requestPermissions()).resolves.toBe(false)
+})
+
+it('requestPermissions rethrows when the user rejects the prompt', async () => {
+  const fake = installFake()
+  fake.request.mockRejectedValue({ code: 4001, message: 'User rejected' })
+  await expect(requestPermissions()).rejects.toMatchObject({ code: 4001 })
+})
+
+it('supportsRequestPermissions infers false from an unsupported-method error', async () => {
+  const fake = installFake()
+  fake.request.mockRejectedValue({ code: -32601, message: 'method not supported' })
+  await expect(supportsRequestPermissions()).resolves.toBe(false)
+})
+
+it('supportsRequestPermissions infers true when the probe succeeds', async () => {
+  const fake = installFake()
+  fake.request.mockResolvedValue([])
+  await expect(supportsRequestPermissions()).resolves.toBe(true)
 })

@@ -5,10 +5,10 @@ import { authApi } from '@/api/auth'
 import { isOkxInstalled, onAccountsChanged, personalSign, requestAccounts, waitForOkx } from '@/wallets/okx'
 import { clearSession, useSession, type Session } from './session'
 
-// 登录：连接 → 取 SIWE 消息 → personal_sign → 换 token。地址统一小写存会话（后端 owner 也是小写）。
-export async function loginWithOkx(): Promise<Session> {
-  if (!(await waitForOkx())) throw new Error('未检测到 OKX 钱包，请先安装')
-  const address = await requestAccounts()
+// 用指定地址走一遍 SIWE 登录：取消息 → personal_sign(address) → verify → 存会话。
+// 地址统一小写存会话（后端 owner 也是小写）。首次连接（loginWithOkx）和多账号切换
+// （switchAccount）都走这一条路径，区别只在地址从哪来。
+export async function loginAs(address: string): Promise<Session> {
   const { message } = await authApi.nonce(address)
   const signature = await personalSign(message, address)
   const r = await authApi.verify(address, signature)
@@ -20,6 +20,21 @@ export async function loginWithOkx(): Promise<Session> {
   }
   useSession.getState().setSession(session)
   return session
+}
+
+// 登录：连接钱包拿地址 → loginAs。
+export async function loginWithOkx(): Promise<Session> {
+  if (!(await waitForOkx())) throw new Error('未检测到 OKX 钱包，请先安装')
+  const address = await requestAccounts()
+  return loginAs(address)
+}
+
+// 多账号切换：对新地址重新签名登录，成功后清空查询缓存（换账号不能看到上一个账号的数据）。
+// 签名被拒或插件只认当前选中账号时 loginAs 会抛错，原样往上抛——会话和缓存都不动，
+// 调用方（AccountMenu）负责把下拉值退回原会话地址并提示用户。
+export async function switchAccount(address: string): Promise<void> {
+  await loginAs(address)
+  queryClient.clear()
 }
 
 // 登出：后端失败也要清本地会话——用户点了登出就不该还留在登录态。

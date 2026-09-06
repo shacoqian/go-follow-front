@@ -51,3 +51,48 @@ export function onAccountsChanged(cb: (accounts: string[]) => void): () => void 
   p.on?.('accountsChanged', cb)
   return () => p.removeListener?.('accountsChanged', cb)
 }
+
+// eth_accounts 不弹窗，只回已经授权过本站的地址；未安装/出错都当作"没有账号"，调用方据此回退到连接流程。
+export async function listAccounts(): Promise<string[]> {
+  if (!isOkxInstalled()) return []
+  try {
+    const accounts = (await okxProvider().request({ method: 'eth_accounts' })) as string[] | undefined
+    return (accounts ?? []).map((a) => getAddress(a))
+  } catch {
+    return []
+  }
+}
+
+// 部分钱包/RPC 转发层不认识某个方法时会用 4200（unsupported method）或 -32601（method not found）
+// 之类的错误码，或者干脆在 message 里写 "method not supported"——三者都当作"不支持"处理。
+function isUnsupportedMethodError(e: unknown): boolean {
+  const code = typeof e === 'object' && e !== null && 'code' in e ? (e as { code?: unknown }).code : undefined
+  if (code === 4200 || code === -32601) return true
+  const message = e instanceof Error ? e.message : typeof e === 'object' && e !== null && 'message' in e ? String((e as { message?: unknown }).message) : ''
+  return /method not supported/i.test(message)
+}
+
+// 弹插件的账号勾选框，让用户追加/取消对本站的授权。用户在弹窗里点了拒绝（4001）要把错误抛出去，
+// 由调用方展示失败；插件根本不认识这个方法则当作"不支持"，返回 false 由调用方隐藏入口。
+export async function requestPermissions(): Promise<boolean> {
+  try {
+    await okxProvider().request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] })
+    return true
+  } catch (e) {
+    if (isUnsupportedMethodError(e)) return false
+    throw e
+  }
+}
+
+// EIP-2255 的 wallet_getPermissions 不是所有钱包都实现；探测它是否可用来判断能不能显示
+// "管理授权账号…" 入口。探测本身失败但看不出是"不支持"信号时，保守返回 true——
+// 真出问题会在用户点击 requestPermissions 时再暴露，交给那里的错误处理。
+export async function supportsRequestPermissions(): Promise<boolean> {
+  try {
+    await okxProvider().request({ method: 'wallet_getPermissions' })
+    return true
+  } catch (e) {
+    if (isUnsupportedMethodError(e)) return false
+    return true
+  }
+}

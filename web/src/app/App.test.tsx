@@ -35,6 +35,9 @@ vi.mock('@/wallets/okx', () => ({
   onAccountsChanged: vi.fn(() => () => {}),
   requestAccounts: vi.fn(),
   personalSign: vi.fn(),
+  listAccounts: vi.fn(async () => []),
+  requestPermissions: vi.fn(),
+  supportsRequestPermissions: vi.fn(async () => true),
 }))
 vi.mock('@/features/auth/auth', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@/features/auth/auth')>()
@@ -49,7 +52,7 @@ import { decisionsApi } from '@/api/decisions'
 import { signalsApi } from '@/api/signals'
 import { adminApi } from '@/api/admin'
 import { refreshMe, watchAccountChanges } from '@/features/auth/auth'
-import { waitForOkx } from '@/wallets/okx'
+import { listAccounts, waitForOkx } from '@/wallets/okx'
 import { useSession } from '@/features/auth/session'
 import { AppRoutes } from './App'
 import { makeQueryClient } from './queryClient'
@@ -79,9 +82,11 @@ beforeEach(() => {
   vi.mocked(adminApi.users).mockResolvedValue([])
 })
 
-it('redirects an anonymous visitor to the login page', () => {
+it('redirects an anonymous visitor to the login page', async () => {
   renderAt('/wallets')
-  expect(screen.getByRole('button', { name: '连接 OKX 钱包' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '连接 OKX 并登录' })).toBeInTheDocument()
+  // 等 LoginPage 里 useOkxAccounts 的首次异步刷新落地，避免 act() 警告溢出到下一个用例。
+  await waitFor(() => expect(listAccounts).toHaveBeenCalled())
 })
 
 it('shows the user navigation without the admin group', async () => {
@@ -126,7 +131,7 @@ it('arms the account watcher only after OKX is injected', async () => {
   expect(watchAccountChanges).not.toHaveBeenCalled()
 })
 
-it('sends a visitor with an expired session back to the login page', () => {
+it('sends a visitor with an expired session back to the login page', async () => {
   useSession.getState().setSession({
     token: 't',
     address: '0xabc',
@@ -134,6 +139,7 @@ it('sends a visitor with an expired session back to the login page', () => {
     expiresAt: new Date(Date.now() - 1000).toISOString(),
   })
   renderAt('/wallets')
-  expect(screen.getByRole('button', { name: '连接 OKX 钱包' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '连接 OKX 并登录' })).toBeInTheDocument()
   expect(useSession.getState().session).toBeNull()
+  await waitFor(() => expect(listAccounts).toHaveBeenCalled())
 })

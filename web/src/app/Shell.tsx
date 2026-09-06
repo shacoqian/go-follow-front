@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button'
 import { useSession } from '@/features/auth/session'
 import { logout, refreshMe, watchAccountChanges } from '@/features/auth/auth'
 import { waitForOkx } from '@/wallets/okx'
-import { shortAddress } from '@/lib/format'
 import { cn } from '@/lib/cn'
+import AccountMenu from './AccountMenu'
 import Banner from './Banner'
 
 const userNav = [
@@ -73,7 +73,7 @@ export default function Shell() {
       <div className="flex min-w-0 flex-1 flex-col">
         <Banner />
         <header className="flex items-center justify-end gap-3 border-b border-slate-200 bg-white px-6 py-3">
-          <span className="font-mono text-sm text-slate-600">{session ? shortAddress(session.address) : ''}</span>
+          <AccountMenu />
           <Button variant="outline" size="sm" onClick={() => void logout()}>
             登出
           </Button>
