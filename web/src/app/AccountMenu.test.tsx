@@ -91,6 +91,8 @@ afterEach(() => {
 
 it('lists the session address plus every remembered account, flagging expired ones', async () => {
   addSaved(B, EXPIRED)
+  // 插件当前账号的标注有自己的一组用例（见下面），这里置空隔离开，只看会话 + saved 的列表。
+  vi.mocked(useOkxAccounts).mockReturnValue({ accounts: [], current: null, refresh: vi.fn(async () => {}) })
   renderMenu()
   const select = await screen.findByLabelText('账号')
   expect(select).toHaveValue(A)
@@ -105,6 +107,24 @@ it('lists the plugin current address even when it has never been saved, labeling
   renderMenu()
   await screen.findByLabelText('账号')
   expect(screen.getByRole('option', { name: `${shortAddress(C.toLowerCase())}（插件当前）` })).toBeInTheDocument()
+})
+
+it('labels the plugin current address as such even when it is also a saved (valid) account', async () => {
+  addSaved(B, VALID)
+  vi.mocked(useOkxAccounts).mockReturnValue({ accounts: [], current: B, refresh: vi.fn(async () => {}) })
+  renderMenu()
+  await screen.findByLabelText('账号')
+  // 插件当前选中的账号始终标注出来——即便它同时也在 saved 里（能免签直接切），用户得知道
+  // 哪个地址眼下真能签得动。
+  expect(screen.getByRole('option', { name: `${shortAddress(B)}（插件当前）` })).toBeInTheDocument()
+})
+
+it('labels the plugin current address as such even when its saved session has expired', async () => {
+  addSaved(B, EXPIRED)
+  vi.mocked(useOkxAccounts).mockReturnValue({ accounts: [], current: B, refresh: vi.fn(async () => {}) })
+  renderMenu()
+  await screen.findByLabelText('账号')
+  expect(screen.getByRole('option', { name: `${shortAddress(B)}（需重新签名）（插件当前）` })).toBeInTheDocument()
 })
 
 it('switches to a saved account without a fresh signature and shows a toast', async () => {

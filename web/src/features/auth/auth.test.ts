@@ -20,7 +20,7 @@ import { authApi } from '@/api/auth'
 import { toast } from '@/components/ui/toast'
 import { shortAddress } from '@/lib/format'
 import * as okx from '@/wallets/okx'
-import { loginAs, loginWithOkx, logout, notePluginAccounts, onUnauthorized, refreshMe, resumeOrLogin, runSwitchChain, signAction, switchAccount, watchAccountChanges } from './auth'
+import { __resetPluginCurrentForTests, loginAs, loginWithOkx, logout, notePluginAccounts, onUnauthorized, refreshMe, resumeOrLogin, runSwitchChain, signAction, switchAccount, watchAccountChanges } from './auth'
 import { clearAllSessions, sessionToken, useSession } from './session'
 
 const ADDR = '0x8ba1f109551bD432803012645Ac136ddd64DBA72'
@@ -32,8 +32,9 @@ beforeEach(() => {
   clearAllSessions()
   // pluginCurrent 是 auth.ts 里的模块级变量，不会随 vi.clearAllMocks()/clearAllSessions() 重置——
   // 每个用例开始前手动清成"页面刚加载"的状态（没有任何已知的插件当前账号），不然上一个用例
-  // 留下的值会串进这一个用例，把"首次事件"错判成"没变"。
-  notePluginAccounts([])
+  // 留下的值会串进这一个用例，把"首次事件"错判成"没变"。notePluginAccounts 现在是只初始化
+  // 一次的哨兵（pluginCurrent 非空时是空操作），清不掉已有的值，得用测试专用的重置函数。
+  __resetPluginCurrentForTests()
   vi.mocked(authApi.nonce).mockResolvedValue({ message: 'siwe-message' })
   vi.mocked(authApi.verify).mockResolvedValue({ token: 'tok', address: ADDR, role: 'admin', expires_at: EXPIRES })
   vi.mocked(authApi.logout).mockResolvedValue(undefined)
@@ -150,8 +151,8 @@ it('watchAccountChanges signs in automatically as the new account when the plugi
   clear.mockRestore()
 })
 
-it('watchAccountChanges logs out when auto sign-in after a plugin switch fails', async () => {
-  await loginWithOkx()
+it('clears only the current session (not the backend token, not other saved sessions) when auto sign-in after a plugin switch fails', async () => {
+  await loginWithOkx() // 会话 A，缓存 saved[A]
   let handler: (accounts: string[]) => void = () => {}
   vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
     handler = cb
@@ -161,8 +162,32 @@ it('watchAccountChanges logs out when auto sign-in after a plugin switch fails',
   vi.mocked(okx.personalSign).mockRejectedValueOnce(new Error('用户拒绝签名'))
   handler([ADDR_B])
   await vi.waitFor(() => expect(sessionToken()).toBeNull())
-  expect(authApi.logout).toHaveBeenCalledTimes(1)
+  // 这不是用户主动登出，也不是插件撤销了整个授权——不该打后端 /auth/logout，也不该把本机
+  // 记住的其它地址一起清掉（下拉的价值就在那些缓存上）。
+  expect(authApi.logout).not.toHaveBeenCalled()
   expect(toast.error).toHaveBeenCalledWith('切换账号失败，请重新登录')
+  expect(useSession.getState().saved[ADDR.toLowerCase()]?.token).toBe('tok') // A 的缓存原样保留
+  expect(useSession.getState().saved[ADDR_B.toLowerCase()]).toBeUndefined() // 没能切成功的 B 不留缓存
+})
+
+it('a failed auto-switch only forgets its own target address, leaving every other saved session intact', async () => {
+  const ADDR_D = '0x2222222222222222222222222222222222222222'
+  await loginWithOkx() // 会话 A，缓存 saved[A]
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-d', address: ADDR_D, role: 'user', expires_at: EXPIRES })
+  await switchAccount(ADDR_D) // 会话 D，缓存 saved[A]、saved[D]
+  let handler: (accounts: string[]) => void = () => {}
+  vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
+    handler = cb
+    return () => {}
+  })
+  watchAccountChanges()
+  vi.mocked(okx.personalSign).mockRejectedValueOnce(new Error('用户拒绝签名')) // 切到 B 的签名会失败
+  handler([ADDR_B]) // 插件切到了从没登录过的 B，自动签名登录失败
+  await vi.waitFor(() => expect(sessionToken()).toBeNull())
+  expect(authApi.logout).not.toHaveBeenCalled()
+  expect(useSession.getState().saved[ADDR.toLowerCase()]?.token).toBe('tok') // A 的缓存原样保留
+  expect(useSession.getState().saved[ADDR_D.toLowerCase()]?.token).toBe('tok-d') // D 的缓存原样保留
+  expect(useSession.getState().saved[ADDR_B.toLowerCase()]).toBeUndefined() // 失败的目标地址不留缓存
 })
 
 it('does not re-trigger a switch when accountsChanged repeats the same accounts[0] (e.g. lock/unlock)', async () => {
@@ -468,15 +493,18 @@ it('does not act on a latched event until the failed switch has already logged o
   await vi.waitFor(() => expect(sessionToken()).toBeNull())
   // 给补跑（如果错误地发生了）留够时间跑完它自己的异步链路，再做断言。
   await new Promise((resolve) => setTimeout(resolve, 0))
-  // 失败先登出（清空会话和全部缓存），锁存的 C 是在 logout() 彻底跑完之后才补跑的——这时
-  // handleAccountsChanged 一看会话已经是空的就直接不动了，不会顺着 C 再签一次名登进去，
-  // 更不会出现"提示要重新登录，其实已经悄悄用 C 登进去了"这种半吊子状态。只有 B 那一次
-  // 签名尝试，checksum(C) 一次都不该出现在 nonce 的调用参数里。
+  // 失败先清掉当前会话，锁存的 C 是在这条链路彻底跑完之后才补跑的——这时 handleAccountsChanged
+  // 一看会话已经是空的就直接不动了，不会顺着 C 再签一次名登进去，更不会出现"提示要重新登录，
+  // 其实已经悄悄用 C 登进去了"这种半吊子状态。只有 B 那一次签名尝试，checksum(C) 一次都不该
+  // 出现在 nonce 的调用参数里。
   expect(authApi.nonce).toHaveBeenCalledTimes(1)
   expect(authApi.nonce).toHaveBeenCalledWith(ADDR_B)
   expect(authApi.nonce).not.toHaveBeenCalledWith(getAddress(ADDR_C))
   expect(useSession.getState().session).toBeNull()
-  expect(useSession.getState().saved).toEqual({})
+  // 失败只清了当前会话和没能切成功的 B 的缓存，A 自己的缓存原样保留（不是用户主动登出，
+  // 不该把本机记住的其它地址一起清掉）。
+  expect(useSession.getState().saved[ADDR.toLowerCase()]?.token).toBe('tok')
+  expect(useSession.getState().saved[ADDR_B.toLowerCase()]).toBeUndefined()
 })
 
 it('drains a latched event after a manual switch (runSwitchChain, the AccountMenu entry point) settles', async () => {
@@ -508,8 +536,8 @@ it('drains a latched event after a manual switch (runSwitchChain, the AccountMen
   expect(authApi.nonce).toHaveBeenNthCalledWith(2, getAddress(ADDR_C))
 })
 
-it('latches (rather than immediately dispatching) an event that arrives during the failure path\'s logout() await', async () => {
-  await loginWithOkx() // 会话 A
+it('does not swallow the drained auto-switch when a plugin-driven notePluginAccounts call lands during the busy window (regression)', async () => {
+  await loginWithOkx() // 会话 A，首次事件（下面的 handler([ADDR_B])）建立 pluginCurrent = 'b'
   vi.mocked(authApi.nonce).mockClear()
   const ADDR_C = '0xabcdef1234567890abcdef1234567890abcdef12'
   let handler: (accounts: string[]) => void = () => {}
@@ -518,21 +546,47 @@ it('latches (rather than immediately dispatching) an event that arrives during t
     return () => {}
   })
   watchAccountChanges()
-  vi.mocked(okx.personalSign).mockRejectedValueOnce(new Error('用户拒绝签名')) // 切到 B 的签名会失败
-  let resolveLogout: () => void = () => {}
-  vi.mocked(authApi.logout).mockReturnValueOnce(new Promise((resolve) => { resolveLogout = () => resolve(undefined) }))
-  handler([ADDR_B]) // 触发切到 B，随后签名失败，失败处理里的 logout() 会卡在 await authApi.logout()
-  await vi.waitFor(() => expect(authApi.logout).toHaveBeenCalledTimes(1))
-  // 这时 switchAccount 内部早就结束了（inFlight 已经是 null），但 chainBusy 还没清——logout()
-  // 还没 await 完。这个事件应该被锁存，不能因为 inFlight 已经是 null 就被当成"没人管"直接派发。
+  let resolveVerify: (v: VerifyResponse) => void = () => {}
+  vi.mocked(authApi.verify).mockReturnValueOnce(new Promise((resolve) => { resolveVerify = resolve }))
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-c', address: ADDR_C, role: 'user', expires_at: EXPIRES })
+  handler([ADDR_B]) // 触发切到 B，chainBusy 被占用，pluginCurrent 建立为 'b'，verify 卡住没回
+  handler([ADDR_C]) // 切换进行中，插件又切到了 C——这次事件先被锁存
+  // useOkxAccounts 的 refresh()（比如它自己的 accountsChanged 监听在忙碌期间也被触发了一次）
+  // 这时调用了 notePluginAccounts([C])：它现在只是个初始化哨兵，pluginCurrent 已经不是 null
+  // （已经是 'b'），这次调用必须是空操作——不能抢先把 pluginCurrent 写成 'c'，不然锁存事件
+  // drain 时会拿"没变"（'c' === 'c'）当理由把这次真实的切换吞掉，这正是本用例要防的回归。
+  notePluginAccounts([ADDR_C])
+  resolveVerify({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  await vi.waitFor(() => expect(toast.success).toHaveBeenCalledWith(`已切换到 ${shortAddress(ADDR_B)}`))
+  // drain 锁存的 [C]：如果 pluginCurrent 被上面那次 notePluginAccounts 污染成了 'c'，这里就不会
+  // 再触发对 C 的自动切换。
+  await vi.waitFor(() => expect(authApi.nonce).toHaveBeenCalledWith(getAddress(ADDR_C)))
+  await vi.waitFor(() => expect(sessionToken()).toBe('tok-c'))
+})
+
+it('does not swallow a switch that follows requestPermissions\' refresh() once pluginCurrent is already established (regression)', async () => {
+  await loginWithOkx() // 会话 A
+  const ADDR_C = '0xabcdef1234567890abcdef1234567890abcdef12'
+  // 模拟 useOkxAccounts 挂载时的首次 listAccounts()：pluginCurrent 还是 null，这次调用允许
+  // 把它初始化为 A（跟会话一致，稳定态）。
+  notePluginAccounts([ADDR])
+  let handler: (accounts: string[]) => void = () => {}
+  vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
+    handler = cb
+    return () => {}
+  })
+  watchAccountChanges()
+  vi.mocked(authApi.nonce).mockClear()
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-c', address: ADDR_C, role: 'user', expires_at: EXPIRES })
+  // 用户点"切换账号…"：requestPermissions() 成功后 useOkxAccounts 的 refresh() 调用了
+  // notePluginAccounts([C])——这时 pluginCurrent 已经是 'a'（不是 null），这次调用必须是
+  // 空操作，不能把 pluginCurrent 提前改写成 'c'。
+  notePluginAccounts([ADDR_C])
+  // 紧跟着插件真的触发了 accountsChanged([C])：如果上面那次 refresh() 污染了 pluginCurrent，
+  // 这里会被误判成"没变"而漏掉这次自动切换。
   handler([ADDR_C])
-  expect(authApi.nonce).not.toHaveBeenCalledWith(getAddress(ADDR_C))
-  expect(useSession.getState().session?.address).toBe(ADDR.toLowerCase()) // logout() 还没落地，会话原样没动
-  resolveLogout()
-  await vi.waitFor(() => expect(sessionToken()).toBeNull())
-  // logout() 落地、chainBusy 清掉之后才补跑锁存的 C；这时会话已经是空的，补跑直接空转。
-  expect(authApi.nonce).not.toHaveBeenCalledWith(getAddress(ADDR_C))
-  expect(useSession.getState().session).toBeNull()
+  await vi.waitFor(() => expect(sessionToken()).toBe('tok-c'))
+  expect(authApi.nonce).toHaveBeenCalledWith(getAddress(ADDR_C))
 })
 
 it('a colliding manual chain does not steal chainBusy ownership from the auto chain actually in flight', async () => {

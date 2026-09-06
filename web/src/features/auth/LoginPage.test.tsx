@@ -12,6 +12,7 @@ vi.mock('@/wallets/okx', () => ({
 
 import { loginAs, loginWithOkx } from './auth'
 import { isOkxInstalled, listAccounts, onAccountsChanged } from '@/wallets/okx'
+import { shortAddress } from '@/lib/format'
 import LoginPage from './LoginPage'
 
 const A = '0x8ba1f109551bD432803012645Ac136ddd64DBA72'
@@ -75,6 +76,18 @@ it('preselects the current account, lets the user pick another, and signs in wit
   await userEvent.click(screen.getByRole('button', { name: '以此账号登录' }))
   expect(loginAs).toHaveBeenCalledWith(B)
   expect(await screen.findByText('任务页')).toBeInTheDocument()
+})
+
+it('shows a hint to switch OKX to the selected account when it differs from the plugin current one', async () => {
+  vi.mocked(listAccounts).mockResolvedValue([A, B])
+  renderAt()
+  const select = await screen.findByLabelText('账号')
+  await waitFor(() => expect(select).toHaveValue(A))
+  expect(screen.queryByText(/请在 OKX 里切到/)).not.toBeInTheDocument()
+  await userEvent.selectOptions(select, B)
+  expect(await screen.findByText(`请在 OKX 里切到 ${shortAddress(B)} 后重试`)).toBeInTheDocument()
+  await userEvent.selectOptions(select, A)
+  await waitFor(() => expect(screen.queryByText(/请在 OKX 里切到/)).not.toBeInTheDocument())
 })
 
 it('shows the error message when signing in with the selected account fails', async () => {

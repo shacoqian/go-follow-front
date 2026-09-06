@@ -18,8 +18,11 @@ export function useOkxAccounts(): OkxAccountsState {
   const refresh = useCallback(async () => {
     const next = await listAccounts()
     setAccounts(next)
-    // 记一下插件当前选中账号（accounts[0]），auth.ts 的 handleAccountsChanged 用它判断插件
-    // 选中是不是真的变了。
+    // 只在 auth.ts 还没有任何基准值时才用这次结果初始化 pluginCurrent（页面刚加载）；一旦
+    // watchAccountChanges 处理过一次真正的 accountsChanged，这里就是空操作——pluginCurrent
+    // 之后只归 handleAccountsChanged 写，不然这个 refresh()（这里的 accountsChanged 监听、
+    // requestPermissions 成功后的手动刷新）随时可能抢在 watcher 前面把"还没处理的变化"提前
+    // 记成"已知状态"，导致锁存事件补跑时被误判成"没变"而漏掉一次该有的自动切换。
     notePluginAccounts(next)
   }, [])
 

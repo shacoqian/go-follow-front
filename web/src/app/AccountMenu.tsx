@@ -86,11 +86,10 @@ export default function AccountMenu() {
   const addressOptions = [...addrs].map((addr) => {
     const cached = saved[addr]
     let label = shortAddress(addr)
-    if (cached) {
-      if (!sessionValid(cached)) label += '（需重新签名）'
-    } else if (addr === pluginCurrent) {
-      label += '（插件当前）'
-    }
+    if (cached && !sessionValid(cached)) label += '（需重新签名）'
+    // 插件当前选中的账号始终标注出来（哪怕它也在 saved 里、甚至是过期的那个）——签名操作
+    // 只认插件当前选中账号，用户得知道选哪个地址眼下真能签得动。
+    if (addr === pluginCurrent) label += '（插件当前）'
     return { value: addr, label }
   })
 

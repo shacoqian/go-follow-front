@@ -62,12 +62,13 @@ export async function resumeOrLogin(address: string): Promise<Session> {
 // 自己的互斥锁，只覆盖它自己那段——不包括调用方紧跟着做的成功/失败收尾（见下面 chainBusy）。
 let inFlight: Promise<void> | null = null
 
-// chainBusy 覆盖的是"一整条切换链路"：switchAccount 本身 + 紧跟着的成功/失败收尾（失败那支还
-// 要等 logout() 落地）。watchAccountChanges 拿它（而不是 inFlight）来判断要不要锁存新事件：
-// 只看 inFlight 的话，链路走到失败分支、switchAccount 内部已经结束但 logout() 还没 await
-// 完的这段空档里 inFlight 已经是 null 了，这时候来的事件会被当成"没人管"直接派发，跟还没跑完
-// 的 logout() 撞出竞态（该清的会话被提前顶替，或者两边谁清掉谁说不准）。chainBusy 从
-// runSwitchChain 一开始就置上、到它整个 await 完（含失败分支的 logout）才清掉，覆盖了这段空档。
+// chainBusy 覆盖的是"一整条切换链路"：switchAccount 本身 + 紧跟着的成功/失败收尾（onSuccess/
+// onError，两者都可能是异步的，比如 accounts 为空时的 logout() 要等后端调用落地）。
+// watchAccountChanges 拿它（而不是 inFlight）来判断要不要锁存新事件：只看 inFlight 的话，
+// switchAccount 内部已经结束但收尾还没跑完的这段空档里 inFlight 已经是 null 了，这时候来的
+// 事件会被当成"没人管"直接派发，跟还没跑完的收尾撞出竞态（该清的会话被提前顶替，或者两边谁
+// 清掉谁说不准）。chainBusy 从 runSwitchChain 一开始就置上、到它整个 await 完（含收尾）才
+// 清掉，覆盖了这段空档。
 let chainBusy: Promise<void> | null = null
 
 // chainBusy 期间收到的 accountsChanged 事件锁存在这里——只留最新一次，链路结束后补跑。
@@ -218,18 +219,40 @@ export async function refreshMe(): Promise<boolean> {
 }
 
 // 插件当前选中账号（小写），供 handleAccountsChanged 判断"插件选中是不是真的变了"。
-// useOkxAccounts 首次 listAccounts() 之后、以及它自己的 accountsChanged 监听里都会调
-// notePluginAccounts 更新它；watchAccountChanges 每次处理事件（包括补跑锁存的事件）时
-// 也会通过 handleAccountsChanged 更新。页面刚加载/模块刚初始化时是 null。
+// 只有 handleAccountsChanged（不管是刚收到的事件，还是 chainBusy 期间锁存、事后补跑的）才能
+// 更新它——它是唯一的写者，通过下面 setPluginCurrent 这个内部函数写。
+// useOkxAccounts 的 refresh()（首次 listAccounts()、它自己的 accountsChanged 监听、
+// requestPermissions 成功后的手动刷新）都可能在 chainBusy 期间、或在 watcher 真正处理某次
+// accountsChanged 事件之前就跑完；如果它也能直接写 pluginCurrent，就可能抢在 watcher 前面把
+// "还没处理的变化"提前记成"已知状态"——等锁存的事件补跑时，比较出来的是"没变"，那次真实的
+// 自动切换就被平白吞掉了（复现：锁存期间调一次 notePluginAccounts([C])，drain 时 C 的切换
+// 应该照样触发，却因为 pluginCurrent 提前被 hook 写成了 'c' 而被判成"没变"）。所以 hook 那边
+// 改成调用下面导出的 notePluginAccounts——它只在 pluginCurrent 还是 null（页面刚加载、
+// 还没有任何基准值）时才会真正写一次，之后就是空操作，把"更新"这件事完全让给 watcher。
 let pluginCurrent: string | null = null
 
-// hook 与 watcher 共同调用：只是记账，不触发任何切换/登出逻辑。
-export function notePluginAccounts(accounts: string[]): void {
+function setPluginCurrent(accounts: string[]): void {
   pluginCurrent = accounts[0] ? accounts[0].toLowerCase() : null
 }
 
+// useOkxAccounts 调用：只在还没有任何基准值时才用它初始化 pluginCurrent（页面刚加载、
+// watcher 还没处理过任何一次 accountsChanged）；一旦 watcher 写过一次，这里就是空操作。
+// 不触发任何切换/登出逻辑。
+export function notePluginAccounts(accounts: string[]): void {
+  if (pluginCurrent !== null) return
+  setPluginCurrent(accounts)
+}
+
+// 仅供测试：pluginCurrent 是模块级状态，不会随 vi.clearAllMocks()/clearAllSessions() 重置，
+// 上一个用例留下的值会串到下一个用例，把"首次事件"错判成"没变"。每个用例开始前调它，
+// 模拟"页面刚加载、还没有任何基准值"。
+export function __resetPluginCurrentForTests(): void {
+  pluginCurrent = null
+}
+
 // 钱包账号事件：分三种情况——
-//   1. accounts 为空：本站被撤销授权/断开，有会话就登出。
+//   1. accounts 为空：本站被撤销授权/断开，有会话就登出（这种"整个都不认了"的场景才用
+//      logout()/clearAllSessions()，清掉本机全部记住的账号——跟下面 onError 分支不是一回事）。
 //   2. accounts[0]（插件当前选中项）跟上一次记的 pluginCurrent 一样：插件选中账号没有真的变
 //      （锁定/解锁、单纯追加/撤销别的地址的授权等也会触发这个事件），不动会话——哪怕这时
 //      会话地址本来就跟 accounts[0] 不一致（比如用户刚在系统内下拉切到了另一个缓存的账号，
@@ -240,7 +263,7 @@ export function notePluginAccounts(accounts: string[]): void {
 // 不等于插件选中账号就自动切换"的默认行为，跟旧版本保持一致。
 function handleAccountsChanged(accounts: string[]): void {
   const prev = pluginCurrent
-  notePluginAccounts(accounts)
+  setPluginCurrent(accounts)
   const s = useSession.getState().session
   if (accounts.length === 0) {
     if (s) void logout()
@@ -254,10 +277,14 @@ function handleAccountsChanged(accounts: string[]): void {
   void runSwitchChain(next, {
     onSuccess: () => toast.success(`已切换到 ${shortAddress(next)}`),
     onError: () => {
-      // 失败要先登出（回登录页），失败提示和"回登录页"是一件事——logout() 落地之前 chainBusy
-      // 都还没清，锁存的事件不会在这中间插队。
+      // 插件自动切到的这个新地址签名失败/被拒——只清掉正在显示的会话（回登录页）和这次
+      // 没能切成功的目标地址的缓存（下次别再拿它免签重试），本机记住的其它地址原样保留：
+      // 下拉的价值就在于这些缓存，一次自动切换失败不该把它们全部清空。跟用户主动点登出、
+      // 或者上面 accounts 为空（插件撤销了整个授权）那种"全部都不认了"的场景不是一回事，
+      // 那两种才用 logout()/clearAllSessions()。
       toast.error('切换账号失败，请重新登录')
-      return logout()
+      clearSession()
+      forgetSession(next)
     },
   })
 }
