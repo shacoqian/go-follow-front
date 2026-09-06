@@ -110,18 +110,27 @@ export async function runSwitchChain(
       await handlers.onError?.(err)
     }
   })()
-  chainBusy = chain
+  // 只有 chainBusy 空着的时候才抢下这次链路的归属权。撞上正在跑的另一条链路时（内部的
+  // switchAccount 会因为 inFlight 被占用立刻拒绝，走 onError，跟以前一样），这次调用绝不能
+  // 抢走／提前清掉别人的 chainBusy——不然它一结束就把还在真正进行中的那条链路的锁给解了，
+  // 后面来的事件会被当成"没人管"直接派发，撞上还没完事的那条链路（可能因此误判成失败、
+  // 平白多一次登出）。用 `chainBusy === chain`（而不是单独一个布尔值）判断"这次调用是不是
+  // 归属者"：没抢到归属权的调用，chainBusy 从头到尾都不会等于它自己的 chain，天然被挡在
+  // finally 的清理／补跑之外。
+  if (chainBusy === null) chainBusy = chain
   try {
     await chain
   } finally {
-    chainBusy = null
-    // 整条链路（含失败分支里的 logout）都落定、chainBusy 也清掉之后才补跑，不然"先补跑 C、
-    // C 刚登进去，随后才轮到的失败处理里的 logout() 又把 C 的会话一起清掉"这种错误顺序就会
-    // 发生。
-    if (pendingAccounts) {
-      const latched = pendingAccounts
-      pendingAccounts = null
-      handleAccountsChanged(latched)
+    if (chainBusy === chain) {
+      chainBusy = null
+      // 整条链路（含失败分支里的 logout）都落定、chainBusy 也清掉之后才补跑，不然"先补跑 C、
+      // C 刚登进去，随后才轮到的失败处理里的 logout() 又把 C 的会话一起清掉"这种错误顺序就会
+      // 发生。
+      if (pendingAccounts) {
+        const latched = pendingAccounts
+        pendingAccounts = null
+        handleAccountsChanged(latched)
+      }
     }
   }
 }

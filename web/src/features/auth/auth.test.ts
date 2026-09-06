@@ -476,3 +476,39 @@ it('latches (rather than immediately dispatching) an event that arrives during t
   expect(authApi.nonce).not.toHaveBeenCalledWith(getAddress(ADDR_C))
   expect(useSession.getState().session).toBeNull()
 })
+
+it('a colliding manual chain does not steal chainBusy ownership from the auto chain actually in flight', async () => {
+  await loginWithOkx() // 会话 A
+  vi.mocked(authApi.nonce).mockClear()
+  const ADDR_C = '0xabcdef1234567890abcdef1234567890abcdef12'
+  const ADDR_D = '0x2222222222222222222222222222222222222222'
+  let handler: (accounts: string[]) => void = () => {}
+  vi.mocked(okx.onAccountsChanged).mockImplementation((cb) => {
+    handler = cb
+    return () => {}
+  })
+  watchAccountChanges()
+  let resolveVerify: (v: VerifyResponse) => void = () => {}
+  vi.mocked(authApi.verify).mockReturnValueOnce(new Promise((resolve) => { resolveVerify = resolve }))
+  vi.mocked(authApi.verify).mockResolvedValueOnce({ token: 'tok-d', address: ADDR_D, role: 'user', expires_at: EXPIRES })
+  handler([ADDR_B]) // 自动切到 B，卡在 verify 没回——chainBusy 归这条自动链路持有
+  // 手动切换（AccountMenu 那条路径，同样走 runSwitchChain）撞上正在跑的自动切换：内部的
+  // switchAccount(C) 会因为 inFlight 被占用立刻拒绝（跟以前一样），但这次调用绝不能抢走／
+  // 提前清掉 chainBusy——chainBusy 仍然归 B 那条链路。
+  let manualErr: unknown
+  await runSwitchChain(ADDR_C, { onError: (err) => { manualErr = err } })
+  expect((manualErr as Error)?.message).toBe('切换进行中，请稍候')
+  expect(authApi.nonce).not.toHaveBeenCalledWith(getAddress(ADDR_C))
+  // 插件这时又冒出了 D：chainBusy 依然归 B 持有，这次事件应该被锁存，不能直接派发——直接
+  // 派发会立刻撞上 inFlight 又被拒绝，进而误判成"切换失败"、多余地登出，即使 B 那条链路
+  // 根本没出问题。
+  handler([ADDR_D])
+  expect(toast.error).not.toHaveBeenCalled()
+  expect(authApi.logout).not.toHaveBeenCalled()
+  resolveVerify({ token: 'tok-b', address: ADDR_B, role: 'user', expires_at: EXPIRES })
+  await vi.waitFor(() => expect(toast.success).toHaveBeenCalledWith(`已切换到 ${shortAddress(ADDR_B)}`))
+  // B 落定、chainBusy 清掉之后才补跑锁存的 [D]：会话现在是 B，D 不在列表里，自动对 D 重新签名登录。
+  await vi.waitFor(() => expect(authApi.nonce).toHaveBeenCalledWith(getAddress(ADDR_D)))
+  expect(toast.error).not.toHaveBeenCalled()
+  expect(authApi.logout).not.toHaveBeenCalled()
+})
