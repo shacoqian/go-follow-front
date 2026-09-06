@@ -9,8 +9,8 @@ import { adminApi, type Overview } from '@/api/admin'
 import { makeQueryClient } from '@/app/queryClient'
 import OverviewPage from './OverviewPage'
 
-const ov: Overview = { targets: 15, tasks: 13, tasks_enabled: 12, positions_open: 4, decisions_today: 77, spent_usdg: '123456789',
-  engine: { engine_last_block: 100, node_block: 150, last_signal_at: '2026-09-06T08:41:24Z', kill_switch: false, dry_run: true, stock_tokens: 13, exit_scan_last_at: null, exit_scan_errors: 2, exit_scan_backoff: 1, positions_blocked: 1, goswapevm_error: 'unhealthy' } }
+const ov: Overview = { tasks: 13, tasks_enabled: 12, positions_open: 4, decisions_today: 77, spent_usdg: '123456789',
+  engine: { engine_last_block: 100, node_block: 150, last_signal_at: '2026-09-06T08:41:24Z', kill_switch: false, dry_run: true, stock_tokens: 13, targets: 15, exit_scan_last_at: null, exit_scan_errors: 2, exit_scan_backoff: 1, positions_blocked: 1, goswapevm_error: 'unhealthy' } }
 
 function renderPage() {
   return render(<QueryClientProvider client={makeQueryClient()}><OverviewPage /></QueryClientProvider>)
@@ -18,7 +18,7 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(adminApi.overview).mockResolvedValue(ov)
-  vi.mocked(adminApi.users).mockResolvedValue([{ address: '0xa', locked: false, created_at: '', role: 'admin', wallets: 1, tasks: 1, positions_open: 0 }, { address: '0xb', locked: true, created_at: '', role: 'user', wallets: 0, tasks: 0, positions_open: 0 }])
+  vi.mocked(adminApi.users).mockResolvedValue([{ address: '0xa', locked: false, created_at: '', last_login_at: null, role: 'admin', wallets: 1, tasks: 1, positions_open: 0 }, { address: '0xb', locked: true, created_at: '', last_login_at: null, role: 'user', wallets: 0, tasks: 0, positions_open: 0 }])
   vi.mocked(adminApi.setSetting).mockResolvedValue(undefined)
 })
 

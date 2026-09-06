@@ -80,6 +80,8 @@ export default function DataPage() {
     queryKey: adminKeys.list(tab, ownerParam),
     queryFn: () => adminApi[tab](owner) as Promise<Row[]>,
     refetchInterval: 10_000,
+    // 只在同一个 tab 换 owner 时保留旧行占位；切 tab 时行的形状不同（Task/Position/…），沿用会渲染出字段不匹配的行。
+    placeholderData: (prevData, prevQuery) => (prevQuery?.queryKey[1] === tab ? prevData : undefined),
     meta: { silent: true },
   })
 
@@ -195,7 +197,9 @@ function TasksTab({
         const badge = taskStatusBadge(t)
         return (
           <Tr key={t.id}>
-            <Td>{t.owner}</Td>
+            <Td>
+              <span className="font-mono text-xs">{shortAddress(t.owner)}</span>
+            </Td>
             <Td>{t.id}</Td>
             <Td>{t.target_id}</Td>
             <Td>{t.wallet_id}</Td>
@@ -226,7 +230,9 @@ function PositionsTab({ rows }: { rows: OwnedPosition[] }) {
     <Table head={['用户', '任务 ID', '代币', '数量', '成本', '状态']}>
       {rows.map((p) => (
         <Tr key={p.id}>
-          <Td>{p.owner}</Td>
+          <Td>
+            <span className="font-mono text-xs">{shortAddress(p.owner)}</span>
+          </Td>
           <Td>{p.task_id}</Td>
           <Td>
             <span className="font-mono">{shortAddress(p.token)}</span>
@@ -245,7 +251,9 @@ function WalletsTab({ rows }: { rows: OwnedWallet[] }) {
     <Table head={['用户', '地址', '标签', '状态']}>
       {rows.map((w) => (
         <Tr key={w.id}>
-          <Td>{w.owner}</Td>
+          <Td>
+            <span className="font-mono text-xs">{shortAddress(w.owner)}</span>
+          </Td>
           <Td>
             <span className="font-mono text-xs">{shortAddress(w.address)}</span>
           </Td>
@@ -262,7 +270,9 @@ function WithdrawalsTab({ rows }: { rows: AdminWithdrawal[] }) {
     <Table head={['用户', '钱包 ID', '资产', '金额', '状态', '交易 ID']}>
       {rows.map((w) => (
         <Tr key={w.id}>
-          <Td>{w.owner}</Td>
+          <Td>
+            <span className="font-mono text-xs">{shortAddress(w.owner)}</span>
+          </Td>
           <Td>{w.wallet_id}</Td>
           <Td>{w.asset}</Td>
           <Td>{w.asset === 'USDG' ? unitsToUsdg(w.amount) : weiToEth(w.amount)}</Td>

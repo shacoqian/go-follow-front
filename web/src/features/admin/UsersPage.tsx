@@ -48,7 +48,7 @@ export default function UsersPage() {
         ) : isError ? (
           <p className="text-sm text-red-600">加载失败</p>
         ) : (
-          <Table head={['地址', '角色', '状态', '钱包数', '任务数', '开仓数', '最近创建', '操作']}>
+          <Table head={['地址', '角色', '状态', '钱包数', '任务数', '开仓数', '最近登录', '最近创建', '操作']}>
             {(users ?? []).map((u) => (
               <Tr key={u.address}>
                 <Td>
@@ -56,11 +56,12 @@ export default function UsersPage() {
                     {shortAddress(u.address)}
                   </Link>
                 </Td>
-                <Td>{u.role}</Td>
+                <Td>{u.role === 'admin' ? '管理员' : '普通用户'}</Td>
                 <Td>{u.locked ? <Badge tone="red">已锁定</Badge> : <Badge tone="green">正常</Badge>}</Td>
                 <Td>{u.wallets}</Td>
                 <Td>{u.tasks}</Td>
                 <Td>{u.positions_open}</Td>
+                <Td>{fmtTime(u.last_login_at)}</Td>
                 <Td>{fmtTime(u.created_at)}</Td>
                 <Td>
                   {u.locked ? (

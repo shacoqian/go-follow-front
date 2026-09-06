@@ -6,7 +6,6 @@ import type { Position } from './positions'
 import type { Decision } from './decisions'
 
 export interface Overview {
-  targets: number
   tasks: number
   tasks_enabled: number
   positions_open: number
@@ -19,6 +18,7 @@ export interface Overview {
     kill_switch: boolean
     dry_run: boolean
     stock_tokens: number
+    targets: number
     exit_scan_last_at: string | null
     exit_scan_errors: number
     exit_scan_backoff: number
@@ -32,6 +32,7 @@ export interface AdminUser {
   address: string
   locked: boolean
   created_at: string
+  last_login_at: string | null
   role: 'admin' | 'user'
   wallets: number
   tasks: number
