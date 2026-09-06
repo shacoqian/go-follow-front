@@ -19,10 +19,12 @@ export function WithdrawalHistoryDialog({
   onOpenChange(o: boolean): void
 }) {
   // 提现记录列表：打开对话框才查询，10s 轮询跟进未终态记录的最新状态。
+  // 失败下面已就地显示“加载失败”，再走全局 toast 只是噪音，故 meta.silent。
   const { data, isLoading, isError } = useQuery({
     queryKey: ['withdrawals', wallet.id],
     queryFn: () => walletsApi.withdrawals(wallet.id),
     enabled: open,
+    meta: { silent: true },
     refetchInterval: 10_000,
   })
 

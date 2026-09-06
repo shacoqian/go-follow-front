@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/CopyButton'
 import { toast } from '@/components/ui/toast'
 import { ApiError } from '@/api/client'
-import { walletsApi, withdrawalsApi, type Wallet, type WithdrawResult } from '@/api/wallets'
+import { walletsApi, withdrawalsApi, type Wallet, type Withdrawal, type WithdrawResult } from '@/api/wallets'
 import { useSession } from '@/features/auth/session'
 import { usdgToUnits, ethToWei, unitsToUsdg, weiToEth } from '@/lib/amount'
 import { txUrl } from '@/lib/explorer'
@@ -62,10 +62,12 @@ export function WithdrawDialog({
   })
 
   // 提现结果确认状态：状态终态（CONFIRMED/FAILED）前持续轮询，之后停止。
+  // 轮询失败已在下方就地提示，再走全局 toast 会盖在结果卡片上，故 meta.silent。
   const poll = useQuery({
     queryKey: ['withdrawal', result?.id ?? 0],
     queryFn: () => withdrawalsApi.get(result!.id),
     enabled: !!result,
+    meta: { silent: true },
     refetchInterval: (q) => (q.state.data && isTerminal(q.state.data.status) ? false : pollMs),
   })
 
@@ -74,6 +76,8 @@ export function WithdrawDialog({
     : `可用 ${asset === 'USDG' ? unitsToUsdg(wallet.usdg_balance) : weiToEth(wallet.eth_balance)} ${asset}`
 
   function handleOpenChange(o: boolean) {
+    // 提现请求在途时不让关：关掉就看不到广播结果和哈希了。
+    if (!o && m.isPending) return
     if (!o) {
       setAsset('USDG')
       setAmount('')
@@ -106,9 +110,11 @@ export function WithdrawDialog({
 
   const hash = poll.data?.tx_hash ?? result?.tx_hash
   const hashUrl = hash ? txUrl(hash) : null
+  // 首次轮询回来之前先用提交返回的状态占位，别让结果卡片空着。
+  const shownStatus = (poll.data?.status ?? result?.status) as Withdrawal['status'] | undefined
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange} title="提现">
+    <Dialog open={open} onOpenChange={handleOpenChange} title="提现" hideClose={m.isPending}>
       <div className="space-y-3">
         <p className="text-sm text-slate-600">{balance}</p>
         <Field label="资产" htmlFor="withdraw-asset">
@@ -146,7 +152,7 @@ export function WithdrawDialog({
         {result && (
           <div className="space-y-2 rounded-md border border-slate-200 p-3 text-sm">
             <div className="flex items-center gap-2">
-              {poll.data && <Badge tone={statusTone(poll.data.status)}>{statusText(poll.data.status)}</Badge>}
+              {shownStatus && <Badge tone={statusTone(shownStatus)}>{statusText(shownStatus)}</Badge>}
               {hash &&
                 (hashUrl ? (
                   <a className="font-mono underline" href={hashUrl} target="_blank" rel="noreferrer">
@@ -160,6 +166,7 @@ export function WithdrawDialog({
                 ))}
             </div>
             {note && <p className="text-slate-600">{note}</p>}
+            {poll.isError && <p className="text-slate-500">状态刷新失败，稍后自动重试</p>}
             {poll.data?.status === 'FAILED' && (
               <div role="alert" className="space-y-1 text-red-600">
                 <p>{poll.data.error}</p>

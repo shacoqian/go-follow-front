@@ -65,8 +65,14 @@ export function DeleteWalletDialog({
     m.mutate(force)
   }
 
+  // 签名/删除在途时不让关：中途关掉会让人以为没删成功。
+  function handleOpenChange(o: boolean) {
+    if (!o && m.isPending) return
+    onOpenChange(o)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="删除钱包">
+    <Dialog open={open} onOpenChange={handleOpenChange} title="删除钱包" hideClose={m.isPending}>
       <div className="space-y-3">
         <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600">
           <li>钱包未被任何跟单任务引用</li>

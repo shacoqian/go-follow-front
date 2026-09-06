@@ -52,8 +52,18 @@ export function ExportDialog({
     m.mutate()
   }
 
+  // 签名/导出在途时不让关；关闭时顺手 reset()，免得密文留在 mutation 缓存里。
+  function handleOpenChange(o: boolean) {
+    if (!o && m.isPending) return
+    if (!o) {
+      setError(null)
+      m.reset()
+    }
+    onOpenChange(o)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="导出密文">
+    <Dialog open={open} onOpenChange={handleOpenChange} title="导出密文" hideClose={m.isPending}>
       <div className="space-y-3">
         <p className="text-sm text-slate-600">
           导出的是数据库里保存的加密密文，不能直接导入钱包；只有拿到服务端 WALLET_STORE_KEY 才能解密。请妥善保管，不要发给任何人。

@@ -58,3 +58,16 @@ it('round-trips through the backend shape', () => {
   expect(fromBackend(toBackend(v, ids))).toEqual(v)
   expect(fromBackend(toBackend(defaultStrategy, ids))).toEqual({ ...defaultStrategy, take_profit_sell_pct: 50 })
 })
+
+it('keeps sub-minute max-hold values exact across a round trip', () => {
+  // 后端存的是秒：90s 必须回显成 1.5 分钟，取整会把用户没动过的值改成 120s。
+  const v = fromBackend({ ...toBackend(defaultStrategy, ids), max_hold_sec: 90, take_profit_bps: 100 })
+  expect(v.max_hold_min).toBe(1.5)
+  expect(toBackend(v, ids).max_hold_sec).toBe(90)
+})
+
+it('asks for whole numbers on count fields', () => {
+  expect(strategySchema.safeParse({ ...defaultStrategy, max_addon_per_token: 1.5 }).error?.issues[0].message).toBe('请输入整数')
+  expect(strategySchema.safeParse({ ...defaultStrategy, skip_launch_window_sec: 1.5 }).error?.issues[0].message).toBe('请输入整数')
+  expect(strategySchema.safeParse({ ...defaultStrategy, retry_max: 1.5 }).error?.issues[0].message).toBe('请输入整数')
+})

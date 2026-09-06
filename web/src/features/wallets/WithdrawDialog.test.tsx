@@ -14,11 +14,11 @@ const w = { id: 7, address: '0xabc', label: 'w', usdg_balance: '12500000', eth_b
 const wd = (status: Withdrawal['status'], error = ''): Withdrawal =>
   ({ id: 99, wallet_id: 7, asset: 'USDG', amount: '1000000', to_addr: '0xme', status, error, tx_hash: '0xhash', created_at: '', updated_at: '' })
 
-function renderDlg() {
+function renderDlg(onOpenChange: (o: boolean) => void = () => {}) {
   const onSubmitted = vi.fn()
   render(
     <QueryClientProvider client={makeQueryClient()}>
-      <WithdrawDialog wallet={w} open onOpenChange={() => {}} onSubmitted={onSubmitted} pollMs={50} />
+      <WithdrawDialog wallet={w} open onOpenChange={onOpenChange} onSubmitted={onSubmitted} pollMs={50} />
     </QueryClientProvider>,
   )
   return onSubmitted
@@ -76,4 +76,15 @@ it('rejects a malformed amount before calling the API', async () => {
   await userEvent.click(screen.getByRole('button', { name: '提现' }))
   expect(await screen.findByText('金额格式不正确')).toBeInTheDocument()
   expect(walletsApi.withdraw).not.toHaveBeenCalled()
+})
+
+it('cannot be dismissed while the withdrawal request is in flight', async () => {
+  vi.mocked(walletsApi.withdraw).mockReturnValue(new Promise(() => {}))
+  const onOpenChange = vi.fn()
+  renderDlg(onOpenChange)
+  await userEvent.type(screen.getByLabelText('金额'), '1')
+  await userEvent.click(screen.getByRole('button', { name: '提现' }))
+  await userEvent.keyboard('{Escape}')
+  expect(onOpenChange).not.toHaveBeenCalled()
+  expect(screen.queryByRole('button', { name: '关闭' })).not.toBeInTheDocument()
 })

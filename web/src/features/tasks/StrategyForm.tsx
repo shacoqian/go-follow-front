@@ -13,6 +13,9 @@ const SIZE_MODE_OPTIONS = [
   { value: 'ratio', label: '按比例' },
 ]
 
+// 买入模式各自的默认额度：固定金额按 USDG 计，比例按 % 计。
+const SIZE_VALUE_DEFAULT = { fixed: '10', ratio: '5' } as const
+
 const SELL_MODE_OPTIONS = [
   { value: 'manual', label: '手动' },
   { value: 'proportional', label: '按比例' },
@@ -27,6 +30,9 @@ const SELL_MODE_HINT: Record<StrategyValues['sell_mode'], string> = {
 
 const SELL_MODE_SENTENCE = Object.values(SELL_MODE_HINT).join('；')
 
+// 数字输入一律显式写 step：type="number" 默认 step=1，浏览器会用原生校验在 submit 之前挡下 0.5
+// 这类小数（表单事件根本不触发）。百分比/分钟字段用 step="any"，次数/秒数字段写明 step="1"。
+// jsdom 不跑原生校验，测试只能断言属性本身。
 export function StrategyForm({
   defaultValues,
   submitText,
@@ -49,7 +55,17 @@ export function StrategyForm({
       <section className="space-y-3 rounded-md border border-slate-200 p-4">
         <h2 className="text-sm font-semibold text-slate-700">买入</h2>
         <Field label="买入模式" htmlFor="size_mode">
-          <Select id="size_mode" options={SIZE_MODE_OPTIONS} {...register('size_mode')} />
+          {/* 切模式时金额/比例的量纲完全不同（10 USDG vs 10%），沿用旧值会误导，改回该模式的默认值。 */}
+          <Select
+            id="size_mode"
+            options={SIZE_MODE_OPTIONS}
+            {...register('size_mode', {
+              onChange: (e) => {
+                const next = e.target.value === 'ratio' ? SIZE_VALUE_DEFAULT.ratio : SIZE_VALUE_DEFAULT.fixed
+                form.setValue('size_value', next, { shouldValidate: false })
+              },
+            })}
+          />
         </Field>
         <Field
           label={sizeMode === 'fixed' ? '固定金额（USDG）' : '比例（%）'}
@@ -68,7 +84,7 @@ export function StrategyForm({
           <Input id="spend_limit" {...register('spend_limit')} />
         </Field>
         <Field label="单币加仓次数" htmlFor="max_addon_per_token" error={errors.max_addon_per_token?.message}>
-          <Input id="max_addon_per_token" type="number" {...register('max_addon_per_token', { valueAsNumber: true })} />
+          <Input id="max_addon_per_token" type="number" step="1" {...register('max_addon_per_token', { valueAsNumber: true })} />
         </Field>
       </section>
 
@@ -98,7 +114,7 @@ export function StrategyForm({
         {tpEnabled && (
           <>
             <Field label="止盈（%）" htmlFor="take_profit_pct" error={errors.take_profit_pct?.message}>
-              <Input id="take_profit_pct" type="number" {...register('take_profit_pct', { valueAsNumber: true })} />
+              <Input id="take_profit_pct" type="number" step="any" {...register('take_profit_pct', { valueAsNumber: true })} />
             </Field>
             <Field
               label="止盈卖出比例（%）"
@@ -108,14 +124,15 @@ export function StrategyForm({
               <Input
                 id="take_profit_sell_pct"
                 type="number"
+                step="any"
                 {...register('take_profit_sell_pct', { valueAsNumber: true })}
               />
             </Field>
             <Field label="止损（%）" htmlFor="stop_loss_pct" error={errors.stop_loss_pct?.message}>
-              <Input id="stop_loss_pct" type="number" {...register('stop_loss_pct', { valueAsNumber: true })} />
+              <Input id="stop_loss_pct" type="number" step="any" {...register('stop_loss_pct', { valueAsNumber: true })} />
             </Field>
             <Field label="最长持仓（分钟）" htmlFor="max_hold_min" error={errors.max_hold_min?.message}>
-              <Input id="max_hold_min" type="number" {...register('max_hold_min', { valueAsNumber: true })} />
+              <Input id="max_hold_min" type="number" step="any" {...register('max_hold_min', { valueAsNumber: true })} />
             </Field>
           </>
         )}
@@ -171,23 +188,24 @@ export function StrategyForm({
         />
         <Checkbox label="跟内盘" {...register('follow_curve')} />
         <Field label="创建者税上限（%）" htmlFor="max_creator_tax_pct" error={errors.max_creator_tax_pct?.message}>
-          <Input id="max_creator_tax_pct" type="number" {...register('max_creator_tax_pct', { valueAsNumber: true })} />
+          <Input id="max_creator_tax_pct" type="number" step="any" {...register('max_creator_tax_pct', { valueAsNumber: true })} />
         </Field>
         <Field label="发射后跳过（秒）" htmlFor="skip_launch_window_sec" error={errors.skip_launch_window_sec?.message}>
           <Input
             id="skip_launch_window_sec"
             type="number"
+            step="1"
             {...register('skip_launch_window_sec', { valueAsNumber: true })}
           />
         </Field>
         <Field label="追价上限（%）" htmlFor="max_chase_pct" error={errors.max_chase_pct?.message}>
-          <Input id="max_chase_pct" type="number" {...register('max_chase_pct', { valueAsNumber: true })} />
+          <Input id="max_chase_pct" type="number" step="any" {...register('max_chase_pct', { valueAsNumber: true })} />
         </Field>
         <Field label="滑点（%）" htmlFor="slippage_pct" error={errors.slippage_pct?.message}>
-          <Input id="slippage_pct" type="number" {...register('slippage_pct', { valueAsNumber: true })} />
+          <Input id="slippage_pct" type="number" step="any" {...register('slippage_pct', { valueAsNumber: true })} />
         </Field>
         <Field label="重试次数" htmlFor="retry_max" error={errors.retry_max?.message}>
-          <Input id="retry_max" type="number" {...register('retry_max', { valueAsNumber: true })} />
+          <Input id="retry_max" type="number" step="1" {...register('retry_max', { valueAsNumber: true })} />
         </Field>
         <Field label="黑名单地址（每行一个）" htmlFor="token_blacklist" error={errors.token_blacklist?.message}>
           <Textarea id="token_blacklist" rows={4} {...register('token_blacklist')} />

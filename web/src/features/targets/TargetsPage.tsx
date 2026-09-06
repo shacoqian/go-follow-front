@@ -17,6 +17,7 @@ export default function TargetsPage() {
   const { data: tasks } = useQuery({ queryKey: ['tasks'], queryFn: tasksApi.list })
   const invalidate = useInvalidateTargets()
   const [dialog, setDialog] = useState<DialogState>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const taskCount = (targetId: number) => (tasks ?? []).filter((t) => t.target_id === targetId).length
@@ -24,19 +25,28 @@ export default function TargetsPage() {
   function openDelete(t: Target) {
     setDeleteError(null)
     setDialog({ kind: 'delete', target: t })
+    setDeleteOpen(true)
+  }
+
+  function closeDelete() {
+    setDeleteOpen(false)
+    setDialog(null)
+    setDeleteError(null)
   }
 
   // 409（仍被任务引用）需要把原文精确展示给用户，就地展示而不走全局 toast（meta.silent），与
   // DeleteWalletDialog 的既有约定一致；成功则失效列表并关闭对话框。
+  // 出错时先把 Radix 对话框关掉（否则它给背景打的 aria-hidden 会把提示条一起藏进无障碍树外），
+  // 再用页面里的提示条展示原文；dialog/deleteError 都留着，再次点“删除”会重置并重新打开。
   const removeTarget = useMutation({
     mutationFn: (id: number) => targetsApi.remove(id),
     meta: { silent: true },
     onSuccess: () => {
       invalidate()
-      setDialog(null)
-      setDeleteError(null)
+      closeDelete()
     },
     onError: (err) => {
+      setDeleteOpen(false)
       setDeleteError(err instanceof Error ? err.message : '操作失败')
     },
   })
@@ -97,8 +107,8 @@ export default function TargetsPage() {
       {dialog?.kind === 'delete' && (
         <>
           <ConfirmDialog
-            open
-            onOpenChange={(o) => !o && setDialog(null)}
+            open={deleteOpen}
+            onOpenChange={(o) => !o && closeDelete()}
             title="删除目标"
             description="删除后不可恢复。"
             confirmText="确认删除"

@@ -38,6 +38,8 @@ npm run build      # 产物在 web/dist
 
 需要在提现记录里展示区块浏览器链接时，复制 `web/.env.example` 为 `web/.env` 并设置 `VITE_EXPLORER_BASE`（如 `https://explorer.example/tx/`）；不配置时界面只显示交易哈希与复制按钮。
 
+`VITE_EXPLORER_BASE` 是 Vite 的编译期变量，值在构建时就被写进产物：`web/.env` 不只要在 `npm run dev` 前准备好，`./app.sh build` 前也必须存在，否则打出来的包里没有浏览器链接（改完要重新构建才生效）。
+
 ## 构建与运行
 
 ```bash

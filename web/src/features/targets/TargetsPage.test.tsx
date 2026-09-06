@@ -63,5 +63,7 @@ it('edits and deletes, showing the 409 text', async () => {
 
   await userEvent.click(within(row).getByRole('button', { name: '删除' }))
   await userEvent.click(screen.getByRole('button', { name: '确认删除' }))
-  expect(await screen.findByText(/目标仍被任务引用/)).toBeInTheDocument()
+  // 409 时对话框必须先关掉：Radix 给背景打的 aria-hidden 会把提示条一起挡在无障碍树外。
+  expect(await screen.findByText(/目标仍被任务引用/)).toBeVisible()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })
