@@ -22,9 +22,10 @@ const VIA_OPTIONS = [
   { value: 'relay', label: '代发' },
 ]
 
-function fmtQuote(asset: string, amount: string): string {
+function fmtQuote(asset: string, amount: string, quoteToken: string): string {
   if (asset === 'ETH') return `${weiToEth(amount)} ETH`
   if (asset === 'USDG') return `${unitsToUsdg(amount)} USDG`
+  if (asset === 'TOKEN') return `${amount} ${shortAddress(quoteToken)}（代币）`
   return `${amount} ${asset}`
 }
 
@@ -120,7 +121,7 @@ export default function SignalsPage() {
                     <CopyButton text={s.token} />
                   </Td>
                   <Td>{s.token_amount}</Td>
-                  <Td>{fmtQuote(s.quote_asset, s.quote_amount)}</Td>
+                  <Td>{fmtQuote(s.quote_asset, s.quote_amount, s.quote_token)}</Td>
                   <Td>{s.venue}</Td>
                 </Tr>
               )

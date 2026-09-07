@@ -56,6 +56,17 @@ it('shows 本人/代发 badges and filters by via', async () => {
   expect(signalsApi.list).toHaveBeenLastCalledWith({ limit: 50 })
 })
 
+it('shows TOKEN quote as amount plus short quote_token address', async () => {
+  const s3: Signal = { ...s, id: 3, quote_asset: 'TOKEN', quote_amount: '123', quote_token: '0x6ab74ee2c0ebd3813fa1f681168acb32ae48f7ac' }
+  vi.mocked(signalsApi.list).mockResolvedValue([s3])
+  render(
+    <QueryClientProvider client={makeQueryClient()}>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><SignalsPage /></MemoryRouter>
+    </QueryClientProvider>,
+  )
+  expect(await screen.findByText('123 0x6ab7…f7ac（代币）')).toBeInTheDocument()
+})
+
 it('shows the short address only when a target has no label', async () => {
   vi.mocked(targetsApi.list).mockResolvedValue([{ id: 2, address: s.target_addr, label: '', note: '', created_at: '' }])
   render(
