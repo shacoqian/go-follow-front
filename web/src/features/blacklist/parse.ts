@@ -9,7 +9,7 @@ export function parseBlacklistText(text: string): { tokens: string[]; error: str
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim()
     if (!line) continue
-    if (!isAddress(line)) return { tokens: [], error: `第 ${i + 1} 行不是合法地址` }
+    if (!isAddress(line, { strict: false })) return { tokens: [], error: `第 ${i + 1} 行不是合法地址` }
     const lower = getAddress(line).toLowerCase()
     if (!seen.has(lower)) {
       seen.add(lower)

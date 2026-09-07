@@ -1,10 +1,14 @@
+import { getAddress } from 'viem'
 import { parseBlacklistText } from './parse'
 
 const A = '0x1111111111111111111111111111111111111111'
+const L = '0xabcdef0123456789abcdef0123456789abcdef01'
 
-it('parses, dedups (case-insensitive), skips blank lines', () => {
-  expect(parseBlacklistText(`${A}\n\n${A.toUpperCase().replace('0X', '0x')}\n`)).toEqual({
-    tokens: [A],
+it('parses, dedups case-insensitively across lowercase/checksummed/all-uppercase forms, skips blank lines', () => {
+  const checksummed = getAddress(L)
+  const upper = L.toUpperCase().replace('0X', '0x')
+  expect(parseBlacklistText(`${L}\n\n${checksummed}\n${upper}\n`)).toEqual({
+    tokens: [L],
     error: null,
   })
 })

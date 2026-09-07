@@ -97,6 +97,7 @@ it('shows the user navigation without the admin group', async () => {
   renderAt('/')
   expect(await screen.findByRole('heading', { name: '钱包' })).toBeInTheDocument()
   expect(screen.getByRole('link', { name: '跟单' })).toHaveAttribute('href', '/tasks')
+  expect(screen.getByRole('link', { name: '黑名单' })).toHaveAttribute('href', '/blacklist')
   expect(screen.queryByText('管理')).not.toBeInTheDocument()
   expect(screen.getByText('0x8ba1…ba72')).toBeInTheDocument()
 })

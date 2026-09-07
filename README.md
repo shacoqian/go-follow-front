@@ -59,6 +59,8 @@ npm run build      # 产物在 web/dist
 
 黑名单按用户一份（不再挂在单个任务上），对该用户名下所有跟单任务生效，只拦买入。导航“黑名单”页里每行填一个代币地址，保存时校验格式并去重规范化为小写；`GET/PUT /api/settings/blacklist` 对应 `{tokens: string[]}`。
 
+依赖 go-follow ≥ `52dd39d`（迁移 5），后端与前端需一起重启。
+
 ## 构建与运行
 
 ```bash
