@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Field } from '@/components/ui/field'
 import { Select } from '@/components/ui/select'
 import { Table, Tr, Td } from '@/components/ui/table'
@@ -15,6 +16,12 @@ const LIMIT_START = 50
 const LIMIT_STEP = 50
 const LIMIT_MAX = 1000
 
+const VIA_OPTIONS = [
+  { value: '', label: '全部' },
+  { value: 'self', label: '本人' },
+  { value: 'relay', label: '代发' },
+]
+
 function fmtQuote(asset: string, amount: string): string {
   if (asset === 'ETH') return `${weiToEth(amount)} ETH`
   if (asset === 'USDG') return `${unitsToUsdg(amount)} USDG`
@@ -25,11 +32,12 @@ export default function SignalsPage() {
   const { data: targets } = useTargets()
 
   const [target, setTarget] = useState('')
+  const [via, setVia] = useState<'' | 'self' | 'relay'>('')
   const [limit, setLimit] = useState(LIMIT_START)
 
-  const params = { ...(target ? { target } : {}), limit }
+  const params = { ...(target ? { target } : {}), ...(via ? { via } : {}), limit }
   const query = useQuery({
-    queryKey: ['signals', target, limit],
+    queryKey: ['signals', target, via, limit],
     queryFn: () => signalsApi.list(params),
     refetchInterval: 10_000,
     meta: { silent: true },
@@ -46,15 +54,27 @@ export default function SignalsPage() {
   return (
     <div>
       <h1 className="text-xl font-semibold">信号</h1>
-      <div className="mt-4 max-w-xs">
-        <Field label="目标" htmlFor="signal-target">
-          <Select
-            id="signal-target"
-            options={[{ value: '', label: '全部' }, ...targetOptions]}
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-          />
-        </Field>
+      <div className="mt-4 flex max-w-xl gap-4">
+        <div className="flex-1">
+          <Field label="目标" htmlFor="signal-target">
+            <Select
+              id="signal-target"
+              options={[{ value: '', label: '全部' }, ...targetOptions]}
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+            />
+          </Field>
+        </div>
+        <div className="flex-1">
+          <Field label="来源" htmlFor="signal-via">
+            <Select
+              id="signal-via"
+              options={VIA_OPTIONS}
+              value={via}
+              onChange={(e) => setVia(e.target.value as '' | 'self' | 'relay')}
+            />
+          </Field>
+        </div>
       </div>
       <div className="mt-4">
         {query.isLoading ? (
@@ -71,13 +91,22 @@ export default function SignalsPage() {
                   <Td>{fmtTime(s.seen_at)}</Td>
                   <Td>{s.block}</Td>
                   <Td>
-                    {targetUrl ? (
-                      <a className="font-mono underline" href={targetUrl} target="_blank" rel="noreferrer">
-                        {shortAddress(s.target_addr)}
-                      </a>
-                    ) : (
-                      <span className="font-mono">{shortAddress(s.target_addr)}</span>
-                    )}
+                    <span className="inline-flex items-center gap-2">
+                      {targetUrl ? (
+                        <a className="font-mono underline" href={targetUrl} target="_blank" rel="noreferrer">
+                          {shortAddress(s.target_addr)}
+                        </a>
+                      ) : (
+                        <span className="font-mono">{shortAddress(s.target_addr)}</span>
+                      )}
+                      {s.via === 'relay' ? (
+                        <Badge tone="blue" title={`发送方 ${shortAddress(s.tx_from)}`}>
+                          代发
+                        </Badge>
+                      ) : (
+                        <Badge tone="gray">本人</Badge>
+                      )}
+                    </span>
                   </Td>
                   <Td>{s.side}</Td>
                   <Td>

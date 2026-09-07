@@ -23,11 +23,13 @@ it('decisions / signals build query strings with only present params', async () 
   await decisionsApi.list({ task: 3, outcome: 'SKIPPED', limit: 100 })
   await signalsApi.list({ limit: 50 })
   await signalsApi.list({ target: '0xabc', since: '2026-09-06T00:00:00Z', limit: 100 })
+  await signalsApi.list({ via: 'relay', limit: 50 })
   expect(req.mock.calls.map((c) => c[1])).toEqual([
     '/decisions?limit=50',
     '/decisions?task=3&outcome=SKIPPED&limit=100',
     '/signals?limit=50',
     '/signals?target=0xabc&since=2026-09-06T00%3A00%3A00Z&limit=100',
+    '/signals?via=relay&limit=50',
   ])
 })
 

@@ -27,7 +27,7 @@ export const strategySchema = z
     max_per_trade: z.string(),
     target_min: z.string(),
     target_max: z.string(),
-    max_addon_per_token: z.number({ error: '请输入数字' }).int('请输入整数').min(1, '至少 1 次'),
+    max_addon_per_token: z.number({ error: '请输入数字' }).int('请输入整数').min(0, '不能为负'),
     sell_mode: z.enum(['manual', 'proportional', 'all']),
     tp_enabled: z.boolean(),
     take_profit_pct: z.number({ error: '请输入数字' }).min(0),

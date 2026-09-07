@@ -5,6 +5,9 @@ export interface Signal {
   id: number
   block: number
   tx_hash: string
+  tx_from: string
+  via: 'self' | 'relay'
+  relay_router: string
   target_addr: string
   side: 'BUY' | 'SELL'
   token: string
@@ -21,6 +24,6 @@ export interface Signal {
 }
 
 export const signalsApi = {
-  list: (p: { target?: string; since?: string; limit: number }) =>
-    request<Signal[]>('GET', `/signals${qs({ target: p.target, since: p.since, limit: p.limit })}`, undefined),
+  list: (p: { target?: string; since?: string; via?: 'self' | 'relay'; limit: number }) =>
+    request<Signal[]>('GET', `/signals${qs({ target: p.target, since: p.since, via: p.via, limit: p.limit })}`, undefined),
 }

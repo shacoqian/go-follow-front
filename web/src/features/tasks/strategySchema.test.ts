@@ -98,6 +98,12 @@ it('fixed validation', () => {
   expect(strategySchema.safeParse({ ...defaultStrategy, slippage_pct: 0.001 }).error?.issues[0].message).toBe('滑点须在 0–100 之间')
 })
 
+it('max_addon_per_token 0 means unlimited; negative rejected', () => {
+  expect(strategySchema.safeParse({ ...defaultStrategy, max_addon_per_token: 0 }).success).toBe(true)
+  expect(toBackend({ ...defaultStrategy, max_addon_per_token: 0 }, ids)).toMatchObject({ max_addon_per_token: 0 })
+  expect(strategySchema.safeParse({ ...defaultStrategy, max_addon_per_token: -1 }).error?.issues[0].message).toBe('不能为负')
+})
+
 it('round-trips through the backend shape', () => {
   const v = { ...defaultStrategy, size_mode: 'ratio' as const, size_value: '7.5', ratio_min: '2', max_per_trade: '40', target_min: '1', target_max: '',
     tp_enabled: true, take_profit_pct: 25, take_profit_sell_pct: 40, stop_loss_pct: 10, max_hold_min: 1.5 }

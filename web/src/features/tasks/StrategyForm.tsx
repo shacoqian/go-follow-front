@@ -115,8 +115,8 @@ export function StrategyForm({
             </Field>
           </>
         )}
-        <Field label="单币加仓次数" htmlFor="max_addon_per_token" error={errors.max_addon_per_token?.message}>
-          <Input id="max_addon_per_token" type="number" min="1" onKeyDown={blockSign} step="1" {...register('max_addon_per_token', { valueAsNumber: true })} />
+        <Field label="单币加仓次数（0 = 不限）" htmlFor="max_addon_per_token" error={errors.max_addon_per_token?.message}>
+          <Input id="max_addon_per_token" type="number" min="0" onKeyDown={blockSign} step="1" {...register('max_addon_per_token', { valueAsNumber: true })} />
         </Field>
       </section>
 

@@ -47,7 +47,7 @@ it('lets percent fields accept decimals and keeps count fields integral', async 
   render(<StrategyForm defaultValues={defaultStrategy} submitText="创建" onSubmit={vi.fn()} />)
   expect(screen.getByLabelText('滑点（%）')).toHaveAttribute('step', 'any')
   expect(screen.getByLabelText('追价上限（%）')).toHaveAttribute('step', 'any')
-  expect(screen.getByLabelText('单币加仓次数')).toHaveAttribute('step', '1')
+  expect(screen.getByLabelText('单币加仓次数（0 = 不限）')).toHaveAttribute('step', '1')
   expect(screen.getByLabelText('重试次数')).toHaveAttribute('step', '1')
 
   await userEvent.click(screen.getByLabelText('开启止盈止损'))
@@ -137,10 +137,10 @@ it('no longer shows the removed fields; keeps 追价上限 with its hint', () =>
 
 it('numeric inputs carry min attributes and refuse a minus sign while typing', async () => {
   render(<StrategyForm defaultValues={defaultStrategy} submitText="创建" onSubmit={vi.fn()} />)
-  expect(screen.getByLabelText('单币加仓次数')).toHaveAttribute('min', '1')
+  expect(screen.getByLabelText('单币加仓次数（0 = 不限）')).toHaveAttribute('min', '0')
   expect(screen.getByLabelText('滑点（%）')).toHaveAttribute('min', '0.01')
   expect(screen.getByLabelText('追价上限（%）')).toHaveAttribute('min', '0')
-  const addon = screen.getByLabelText('单币加仓次数') as HTMLInputElement
+  const addon = screen.getByLabelText('单币加仓次数（0 = 不限）') as HTMLInputElement
   await userEvent.clear(addon)
   await userEvent.type(addon, '-3')
   expect(addon.value).toBe('3')

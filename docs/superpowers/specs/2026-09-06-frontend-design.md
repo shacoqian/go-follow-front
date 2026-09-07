@@ -247,3 +247,11 @@ zod schema 一处定义，同时导出表单类型与提交换算。界面单位
   - 保存前按行拆分、trim、忽略空行，用 viem 的 `isAddress`/`getAddress` 校验并规范化为小写去重；发现非法行就地提示“第 {n} 行不是合法地址”（n 为原始行号，不算被忽略的空行）且不发请求；超过 500 条提示“最多 500 条”。
   - 校验通过后 `PUT /api/settings/blacklist`；成功 toast“黑名单已保存”并把返回结果写回查询缓存；`warning` 按上面规则再弹一条；后端 400（如地址格式在服务端才发现的问题）就地展示 `error` 原文，不走全局 toast。页面底部显示当前条数“共 {n} 条”。
 - 上线顺序：本计划合并后，go-follow 后端用 `bin/gofollow`（`52dd39d`）重启，前端 `./app.sh build && ./app.sh restart`，两边一起重启后再跑 `scripts/smoke.mjs`——避免旧前端仍提交已删除的任务级字段被新后端拒绝，或新前端调用旧后端还不存在的 `/settings/blacklist`。
+
+## 实现修订（2026-09-07，计划 F）
+
+- 依赖 go-follow ≥ `eb1c72c`：`GET /signals` 响应新增 `tx_from`、`via`（`self|relay`）、`relay_router` 三个字段，并接受 `?via=` 查询参数；`max_addon_per_token` 允许提交 `0`（表示不限）。
+- 信号页（`SignalsPage`）：
+  - “目标”旁新增“来源”筛选（`Select`，选项 全部/本人/代发），选中时把 `via: 'self' | 'relay'` 并入查询参数与 `queryKey`，`全部` 不带该参数。
+  - 表格“目标”列在地址后追加来源标签：`self` 灰色 `本人`；`relay` 蓝色 `代发`，鼠标悬停显示 `发送方 {shortAddress(tx_from)}`。
+- 跟单任务表单：`单币加仓次数` 字段允许输入 `0`（表示不限加仓次数上限），标签改为“单币加仓次数（0 = 不限）”，`min` 属性由 `1` 改为 `0`；`strategySchema` 校验从 `.min(1, '至少 1 次')` 改为 `.min(0, '不能为负')`，默认值仍为 `1`。
