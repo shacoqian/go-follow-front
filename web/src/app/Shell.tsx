@@ -12,6 +12,7 @@ const userNav = [
   { to: '/wallets', label: '钱包' },
   { to: '/targets', label: '目标' },
   { to: '/tasks', label: '跟单' },
+  { to: '/blacklist', label: '黑名单' },
   { to: '/positions', label: '仓位' },
   { to: '/decisions', label: '决策' },
   { to: '/signals', label: '信号' },

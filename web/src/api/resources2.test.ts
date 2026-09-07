@@ -3,6 +3,7 @@ import { positionsApi } from './positions'
 import { decisionsApi } from './decisions'
 import { signalsApi } from './signals'
 import { adminApi } from './admin'
+import { blacklistApi } from './blacklist'
 
 const req = vi.spyOn(client, 'request')
 beforeEach(() => req.mockReset().mockResolvedValue({}))
@@ -62,5 +63,14 @@ it('admin routes', async () => {
     ['GET', '/admin/audit?limit=100', undefined],
     ['GET', '/admin/audit?owner=0xabc&action=withdraw&limit=200', undefined],
     ['PUT', '/settings/kill_switch', { on: true }],
+  ])
+})
+
+it('blacklist routes', async () => {
+  await blacklistApi.get()
+  await blacklistApi.put(['0xa'])
+  expect(req.mock.calls.map((c) => c.slice(0, 3))).toEqual([
+    ['GET', '/settings/blacklist', undefined],
+    ['PUT', '/settings/blacklist', { tokens: ['0xa'] }],
   ])
 })

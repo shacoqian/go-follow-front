@@ -6,6 +6,7 @@ import TargetsPage from '@/features/targets/TargetsPage'
 import TasksPage from '@/features/tasks/TasksPage'
 import TaskFormPage from '@/features/tasks/TaskFormPage'
 import TaskEditPage from '@/features/tasks/TaskEditPage'
+import BlacklistPage from '@/features/blacklist/BlacklistPage'
 import PositionsPage from '@/features/positions/PositionsPage'
 import DecisionsPage from '@/features/positions/DecisionsPage'
 import SignalsPage from '@/features/positions/SignalsPage'
@@ -31,6 +32,7 @@ export function AppRoutes() {
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/tasks/new" element={<TaskFormPage />} />
           <Route path="/tasks/:id/edit" element={<TaskEditPage />} />
+          <Route path="/blacklist" element={<BlacklistPage />} />
           <Route path="/positions" element={<PositionsPage />} />
           <Route path="/decisions" element={<DecisionsPage />} />
           <Route path="/signals" element={<SignalsPage />} />

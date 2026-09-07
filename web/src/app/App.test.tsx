@@ -9,6 +9,7 @@ vi.mock('@/api/wallets', () => ({
 }))
 vi.mock('@/api/targets', () => ({ targetsApi: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() } }))
 vi.mock('@/api/tasks', () => ({ tasksApi: { list: vi.fn() } }))
+vi.mock('@/api/blacklist', () => ({ blacklistApi: { get: vi.fn(), put: vi.fn() } }))
 vi.mock('@/api/positions', () => ({ positionsApi: { byTask: vi.fn(), sell: vi.fn() } }))
 vi.mock('@/api/decisions', () => ({ decisionsApi: { list: vi.fn() } }))
 vi.mock('@/api/signals', () => ({ signalsApi: { list: vi.fn() } }))
@@ -48,6 +49,7 @@ import { healthApi } from '@/api/health'
 import { walletsApi } from '@/api/wallets'
 import { targetsApi } from '@/api/targets'
 import { tasksApi } from '@/api/tasks'
+import { blacklistApi } from '@/api/blacklist'
 import { decisionsApi } from '@/api/decisions'
 import { signalsApi } from '@/api/signals'
 import { adminApi } from '@/api/admin'
@@ -77,6 +79,7 @@ beforeEach(() => {
   vi.mocked(walletsApi.list).mockResolvedValue([])
   vi.mocked(targetsApi.list).mockResolvedValue([])
   vi.mocked(tasksApi.list).mockResolvedValue([])
+  vi.mocked(blacklistApi.get).mockResolvedValue({ tokens: [] })
   vi.mocked(decisionsApi.list).mockResolvedValue([])
   vi.mocked(signalsApi.list).mockResolvedValue([])
   vi.mocked(adminApi.users).mockResolvedValue([])
