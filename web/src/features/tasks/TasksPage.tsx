@@ -86,7 +86,7 @@ export default function TasksPage() {
         ) : isError ? (
           <p className="text-sm text-red-600">加载失败</p>
         ) : (
-          <Table head={['目标', '钱包', '状态', '进度', '策略', '操作']}>
+          <Table head={['目标', '钱包', '状态', '累计买入', '策略', '操作']}>
             {(tasks ?? []).map((t) => (
               <TaskRow
                 key={t.id}

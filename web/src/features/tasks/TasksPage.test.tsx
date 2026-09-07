@@ -17,7 +17,7 @@ import TasksPage from './TasksPage'
 import { defaultStrategy, toBackend } from './strategySchema'
 
 const base = toBackend(defaultStrategy, { wallet_id: 1, target_id: 2 })
-const t1: Task = { ...base, id: 10, owner: '0xabc', enabled: true, spent_usdg: '5000000', consecutive_failures: 0, paused_reason: '', paused_at: null, spend_limit_usdg: '20000000' }
+const t1: Task = { ...base, id: 10, owner: '0xabc', enabled: true, spent_usdg: '35000000', consecutive_failures: 0, paused_reason: '', paused_at: null }
 // target_id 显式改为不在 mock 目标列表中的 3（brief 原样两条任务都继承 base 的 target_id: 2，会与 t1 撞出同一个
 // "大户A" 文本节点，让未 within 限定的 screen.findByText('大户A') 行定位报 "Found multiple elements"；
 // row2 的断言都不依赖目标列，这里只是避免数据碰撞，顺带覆盖"找不到显示 #target_id"的兜底分支）。
@@ -40,7 +40,6 @@ const t3: Task = {
   consecutive_failures: 0,
   paused_reason: '',
   paused_at: null,
-  spend_limit_usdg: '20000000',
 }
 
 function renderPage() {
@@ -66,15 +65,15 @@ beforeEach(() => {
   vi.mocked(walletsApi.list).mockResolvedValue([{ id: 1, address: '0x1111111111111111111111111111111111111111', label: '主钱包', status: 'active', usdg_balance: '0', eth_balance: '0', task_count: 1, has_pending_withdrawal: false, note: '', created_at: '' }])
 })
 
-it('lists tasks with target/wallet labels, status badges, progress and mode summary', async () => {
+it('lists tasks with target/wallet labels, status badges, cumulative buy and mode summary', async () => {
   renderPage()
   const row = (await screen.findByText('大户A')).closest('tr')!
   expect(within(row).getByText('主钱包')).toBeInTheDocument()
   expect(within(row).getByText('运行中')).toBeInTheDocument()
-  expect(within(row).getByText('5 / 20 USDG')).toBeInTheDocument()
+  expect(within(row).getByText('累计买入 35 USDG')).toBeInTheDocument()
   expect(within(row).getByText('固定 10 USDG · 按比例卖')).toBeInTheDocument()
   const row2 = screen.getByText('管理员禁用').closest('tr')!
-  expect(within(row2).getByText('不限')).toBeInTheDocument()
+  expect(within(row2).getByText('累计买入 0 USDG')).toBeInTheDocument()
   expect(within(row2).getByRole('button', { name: '启用' })).toBeDisabled()
   expect(screen.getByText('比例 10%（5–50 USDG） · 目标 ≥1 USDG · 按比例卖')).toBeInTheDocument()
 })

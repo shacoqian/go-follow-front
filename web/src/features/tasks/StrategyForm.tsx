@@ -1,20 +1,11 @@
-import { Controller, useForm } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
-import {
-  FIXED_DEFAULTS,
-  PLATFORMS,
-  QUOTE_ASSETS,
-  RATIO_DEFAULTS,
-  defaultStrategy,
-  strategySchema,
-  type StrategyValues,
-} from './strategySchema'
+import { FIXED_DEFAULTS, RATIO_DEFAULTS, defaultStrategy, strategySchema, type StrategyValues } from './strategySchema'
 
 const SIZE_MODE_OPTIONS = [
   { value: 'fixed', label: '固定金额' },
@@ -52,7 +43,7 @@ export function StrategyForm({
   onSubmit(values: StrategyValues): void
 }) {
   const form = useForm<StrategyValues>({ resolver: zodResolver(strategySchema), defaultValues })
-  const { register, control, watch, setValue, clearErrors } = form
+  const { register, watch, setValue, clearErrors } = form
   const { errors } = form.formState
   const sizeMode = watch('size_mode')
   const tpEnabled = watch('tp_enabled')
@@ -119,9 +110,6 @@ export function StrategyForm({
             </Field>
           </>
         )}
-        <Field label="总额度（USDG，0=不限）" htmlFor="spend_limit" error={errors.spend_limit?.message}>
-          <Input id="spend_limit" {...register('spend_limit')} />
-        </Field>
         <Field label="单币加仓次数" htmlFor="max_addon_per_token" error={errors.max_addon_per_token?.message}>
           <Input id="max_addon_per_token" type="number" step="1" {...register('max_addon_per_token', { valueAsNumber: true })} />
         </Field>
@@ -198,66 +186,13 @@ export function StrategyForm({
       </section>
 
       <section className="space-y-3 rounded-md border border-slate-200 p-4">
-        <h2 className="text-sm font-semibold text-slate-700">过滤</h2>
-        <Controller
-          control={control}
-          name="platforms"
-          render={({ field }) => (
-            <Field label="场所" error={errors.platforms?.message}>
-              <div className="flex flex-wrap gap-3">
-                {PLATFORMS.map((p) => (
-                  <Checkbox
-                    key={p.value}
-                    label={p.label}
-                    checked={field.value.includes(p.value)}
-                    onChange={(e) => {
-                      const next = new Set(field.value)
-                      if (e.target.checked) next.add(p.value)
-                      else next.delete(p.value)
-                      field.onChange(PLATFORMS.filter((x) => next.has(x.value)).map((x) => x.value))
-                    }}
-                  />
-                ))}
-              </div>
-            </Field>
-          )}
-        />
-        <Controller
-          control={control}
-          name="quote_assets"
-          render={({ field }) => (
-            <Field label="计价币" error={errors.quote_assets?.message}>
-              <div className="flex flex-wrap gap-3">
-                {QUOTE_ASSETS.map((q) => (
-                  <Checkbox
-                    key={q.value}
-                    label={q.label}
-                    checked={field.value.includes(q.value)}
-                    onChange={(e) => {
-                      const next = new Set(field.value)
-                      if (e.target.checked) next.add(q.value)
-                      else next.delete(q.value)
-                      field.onChange(QUOTE_ASSETS.filter((x) => next.has(x.value)).map((x) => x.value))
-                    }}
-                  />
-                ))}
-              </div>
-            </Field>
-          )}
-        />
-        <Checkbox label="跟内盘" {...register('follow_curve')} />
-        <Field label="创建者税上限（%）" htmlFor="max_creator_tax_pct" error={errors.max_creator_tax_pct?.message}>
-          <Input id="max_creator_tax_pct" type="number" step="any" {...register('max_creator_tax_pct', { valueAsNumber: true })} />
-        </Field>
-        <Field label="发射后跳过（秒）" htmlFor="skip_launch_window_sec" error={errors.skip_launch_window_sec?.message}>
-          <Input
-            id="skip_launch_window_sec"
-            type="number"
-            step="1"
-            {...register('skip_launch_window_sec', { valueAsNumber: true })}
-          />
-        </Field>
-        <Field label="追价上限（%）" htmlFor="max_chase_pct" error={errors.max_chase_pct?.message}>
+        <h2 className="text-sm font-semibold text-slate-700">风险控制</h2>
+        <Field
+          label="追价上限（%）"
+          htmlFor="max_chase_pct"
+          hint="含 STOCK 计价信号建议放宽 0.5–1 个百分点"
+          error={errors.max_chase_pct?.message}
+        >
           <Input id="max_chase_pct" type="number" step="any" {...register('max_chase_pct', { valueAsNumber: true })} />
         </Field>
         <Field label="滑点（%）" htmlFor="slippage_pct" error={errors.slippage_pct?.message}>
@@ -265,9 +200,6 @@ export function StrategyForm({
         </Field>
         <Field label="重试次数" htmlFor="retry_max" error={errors.retry_max?.message}>
           <Input id="retry_max" type="number" step="1" {...register('retry_max', { valueAsNumber: true })} />
-        </Field>
-        <Field label="黑名单地址（每行一个）" htmlFor="token_blacklist" error={errors.token_blacklist?.message}>
-          <Textarea id="token_blacklist" rows={4} {...register('token_blacklist')} />
         </Field>
       </section>
 

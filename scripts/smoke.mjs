@@ -56,7 +56,7 @@ const tAddr = '0x' + Date.now().toString(16).padStart(40, 'a').slice(-40)
 const tg = await call('POST', '/targets', { address: tAddr, label: 'smoke', note: '' })
 
 // 建任务：POST /tasks 携带完整 TaskInput（字段与 web/src/api/tasks.ts 的 TaskInput 一一对应），
-// 数值取自策略表单默认值换算后的 bps/最小单位（比例 10%、我方上限 20 USDG、创作者税上限 2%、
+// 数值取自策略表单默认值换算后的 bps/最小单位（比例 10%、我方上限 20 USDG、
 // 追涨上限 15%、滑点 10%），与 strategySchema.ts 的 defaultStrategy 一致。
 const task = await call('POST', '/tasks', {
   wallet_id: w.id,
@@ -67,20 +67,13 @@ const task = await call('POST', '/tasks', {
   max_per_trade_usdg: '20000000',
   min_target_trade_usdg: '0',
   max_target_trade_usdg: '0',
-  spend_limit_usdg: '0',
   max_addon_per_token: 1,
   sell_mode: 'proportional',
   take_profit_bps: 0,
   take_profit_sell_bps: 0,
   stop_loss_bps: 0,
   max_hold_sec: 0,
-  follow_curve: true,
-  platforms: ['uniswap'],
-  quote_assets: ['USDG'],
-  max_creator_tax_bps: 200,
-  skip_launch_window_sec: 15,
   max_chase_bps: 1500,
-  token_blacklist: [],
   slippage_bps: 1000,
   retry_max: 2,
 })

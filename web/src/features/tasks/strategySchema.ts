@@ -1,31 +1,6 @@
-import { isAddress } from 'viem'
 import { z } from 'zod'
 import type { TaskInput } from '@/api/tasks'
 import { bpsToPct, pctToBps, unitsToUsdg, usdgToUnits } from '@/lib/amount'
-
-export const PLATFORMS = [
-  { value: 'pons_curve', label: '内盘' },
-  { value: 'pons_pool', label: '内盘毕业池' },
-  { value: 'uniswap', label: 'Uniswap' },
-] as const
-
-export const QUOTE_ASSETS = [
-  { value: 'USDG', label: 'USDG' },
-  { value: 'ETH', label: 'ETH' },
-  { value: 'STOCK', label: '股票代币' },
-] as const
-
-const amount = z.string().refine(
-  (s) => {
-    try {
-      usdgToUnits(s)
-      return true
-    } catch {
-      return false
-    }
-  },
-  '金额格式不正确',
-)
 
 // 可选金额：'' 视为未设；其余按 USDG 6 位小数校验。返回最小单位串（'' → '0'）或抛 Error('金额格式不正确')。
 function optUnits(s: string): string {
@@ -44,14 +19,6 @@ function hasMoreThanTwoDecimals(p: number): boolean {
   return Math.abs(p * 100 - Math.round(p * 100)) > 1e-9
 }
 
-function parseBlacklist(s: string): string[] {
-  return s
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((l) => l.toLowerCase())
-}
-
 export const strategySchema = z
   .object({
     size_mode: z.enum(['fixed', 'ratio']),
@@ -60,7 +27,6 @@ export const strategySchema = z
     max_per_trade: z.string(),
     target_min: z.string(),
     target_max: z.string(),
-    spend_limit: amount,
     max_addon_per_token: z.number({ error: '请输入数字' }).int('请输入整数').min(1, '至少 1 次'),
     sell_mode: z.enum(['manual', 'proportional', 'all']),
     tp_enabled: z.boolean(),
@@ -72,15 +38,9 @@ export const strategySchema = z
     stop_loss_pct: z.number({ error: '请输入数字' }).min(0).lt(100, '止损比例须小于 100'),
     // 后端存的是秒，90s = 1.5 分钟：这里不能限制成整数分钟，否则编辑一次就把值改了。
     max_hold_min: z.number({ error: '请输入数字' }).min(0),
-    platforms: z.array(z.string()).min(1, '至少选一个场所'),
-    quote_assets: z.array(z.string()).min(1, '至少选一种计价币'),
-    follow_curve: z.boolean(),
-    max_creator_tax_pct: z.number({ error: '请输入数字' }).min(0).max(100),
-    skip_launch_window_sec: z.number({ error: '请输入数字' }).int('请输入整数').min(0),
     max_chase_pct: z.number({ error: '请输入数字' }).min(0),
     slippage_pct: z.number({ error: '请输入数字' }).gt(0, '滑点须在 0–100 之间').lt(100, '滑点须在 0–100 之间'),
     retry_max: z.number({ error: '请输入数字' }).int('请输入整数').min(0),
-    token_blacklist: z.string(),
   })
   .superRefine((v, ctx) => {
     if (v.size_mode === 'fixed') {
@@ -156,16 +116,12 @@ export const strategySchema = z
     if (tpSellBps < 1 || tpSellBps > 10000) {
       ctx.addIssue({ code: 'custom', path: ['take_profit_sell_pct'], message: '止盈卖出比例须在 0.01–100' })
     }
-    parseBlacklist(v.token_blacklist).forEach((a, i) => {
-      if (!isAddress(a)) ctx.addIssue({ code: 'custom', path: ['token_blacklist'], message: `黑名单第 ${i + 1} 行不是合法地址` })
-    })
 
     if (v.tp_enabled) {
       if (hasMoreThanTwoDecimals(v.take_profit_pct)) ctx.addIssue({ code: 'custom', path: ['take_profit_pct'], message: '最多 2 位小数' })
       if (hasMoreThanTwoDecimals(v.take_profit_sell_pct)) ctx.addIssue({ code: 'custom', path: ['take_profit_sell_pct'], message: '最多 2 位小数' })
       if (hasMoreThanTwoDecimals(v.stop_loss_pct)) ctx.addIssue({ code: 'custom', path: ['stop_loss_pct'], message: '最多 2 位小数' })
     }
-    if (hasMoreThanTwoDecimals(v.max_creator_tax_pct)) ctx.addIssue({ code: 'custom', path: ['max_creator_tax_pct'], message: '最多 2 位小数' })
     if (hasMoreThanTwoDecimals(v.max_chase_pct)) ctx.addIssue({ code: 'custom', path: ['max_chase_pct'], message: '最多 2 位小数' })
     if (hasMoreThanTwoDecimals(v.slippage_pct)) ctx.addIssue({ code: 'custom', path: ['slippage_pct'], message: '最多 2 位小数' })
   })
@@ -182,7 +138,6 @@ export const defaultStrategy: StrategyValues = {
   max_per_trade: RATIO_DEFAULTS.max_per_trade,
   target_min: '',
   target_max: '',
-  spend_limit: '0',
   max_addon_per_token: 1,
   sell_mode: 'proportional',
   tp_enabled: false,
@@ -190,15 +145,9 @@ export const defaultStrategy: StrategyValues = {
   take_profit_sell_pct: 50,
   stop_loss_pct: 0,
   max_hold_min: 0,
-  platforms: ['pons_curve', 'pons_pool', 'uniswap'],
-  quote_assets: ['USDG', 'ETH'],
-  follow_curve: true,
-  max_creator_tax_pct: 2,
-  skip_launch_window_sec: 15,
   max_chase_pct: 15,
   slippage_pct: 10,
   retry_max: 2,
-  token_blacklist: '',
 }
 
 export function toBackend(v: StrategyValues, ids: { wallet_id: number; target_id: number }): TaskInput {
@@ -210,20 +159,13 @@ export function toBackend(v: StrategyValues, ids: { wallet_id: number; target_id
     max_per_trade_usdg: v.size_mode === 'ratio' ? optUnits(v.max_per_trade) : '0',
     min_target_trade_usdg: optUnits(v.target_min),
     max_target_trade_usdg: optUnits(v.target_max),
-    spend_limit_usdg: usdgToUnits(v.spend_limit),
     max_addon_per_token: v.max_addon_per_token,
     sell_mode: v.sell_mode,
     take_profit_bps: v.tp_enabled ? pctToBps(v.take_profit_pct) : 0,
     take_profit_sell_bps: v.tp_enabled ? pctToBps(v.take_profit_sell_pct) : 0,
     stop_loss_bps: v.tp_enabled ? pctToBps(v.stop_loss_pct) : 0,
     max_hold_sec: v.tp_enabled ? Math.round(v.max_hold_min * 60) : 0,
-    follow_curve: v.follow_curve,
-    platforms: [...v.platforms],
-    quote_assets: [...v.quote_assets],
-    max_creator_tax_bps: pctToBps(v.max_creator_tax_pct),
-    skip_launch_window_sec: v.skip_launch_window_sec,
     max_chase_bps: pctToBps(v.max_chase_pct),
-    token_blacklist: parseBlacklist(v.token_blacklist),
     slippage_bps: pctToBps(v.slippage_pct),
     retry_max: v.retry_max,
   }
@@ -240,7 +182,6 @@ export function fromBackend(t: TaskInput): StrategyValues {
     max_per_trade: t.size_mode === 'ratio' ? unitsToUsdg(t.max_per_trade_usdg) : RATIO_DEFAULTS.max_per_trade,
     target_min: zeroToEmpty(t.min_target_trade_usdg),
     target_max: zeroToEmpty(t.max_target_trade_usdg),
-    spend_limit: unitsToUsdg(t.spend_limit_usdg),
     max_addon_per_token: t.max_addon_per_token,
     sell_mode: t.sell_mode,
     tp_enabled: tp,
@@ -248,15 +189,9 @@ export function fromBackend(t: TaskInput): StrategyValues {
     take_profit_sell_pct: t.take_profit_sell_bps > 0 ? bpsToPct(t.take_profit_sell_bps) : 50,
     stop_loss_pct: bpsToPct(t.stop_loss_bps),
     max_hold_min: t.max_hold_sec / 60,
-    platforms: [...t.platforms],
-    quote_assets: [...t.quote_assets],
-    follow_curve: t.follow_curve,
-    max_creator_tax_pct: bpsToPct(t.max_creator_tax_bps),
-    skip_launch_window_sec: t.skip_launch_window_sec,
     max_chase_pct: bpsToPct(t.max_chase_bps),
     slippage_pct: bpsToPct(t.slippage_bps),
     retry_max: t.retry_max,
-    token_blacklist: t.token_blacklist.join('\n'),
   }
 }
 

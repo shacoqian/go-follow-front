@@ -53,8 +53,6 @@ export function TaskRow({
 }) {
   const adminPaused = !t.enabled && t.paused_reason === 'admin'
   const badge = taskStatusBadge(t)
-  const limitUnlimited = t.spend_limit_usdg === '0'
-  const spentPct = limitUnlimited ? 0 : Math.min(100, (Number(t.spent_usdg) / Number(t.spend_limit_usdg)) * 100)
 
   return (
     <Tr>
@@ -66,18 +64,7 @@ export function TaskRow({
       <Td>
         <Badge tone={badge.tone}>{badge.label}</Badge>
       </Td>
-      <Td>
-        {limitUnlimited ? (
-          '不限'
-        ) : (
-          <div className="min-w-[8rem]">
-            <div>{`${unitsToUsdg(t.spent_usdg)} / ${unitsToUsdg(t.spend_limit_usdg)} USDG`}</div>
-            <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100">
-              <div className="h-1.5 rounded-full bg-slate-500" style={{ width: `${spentPct}%` }} />
-            </div>
-          </div>
-        )}
-      </Td>
+      <Td>{`累计买入 ${unitsToUsdg(t.spent_usdg)} USDG`}</Td>
       <Td>{taskSummaryText(t)}</Td>
       <Td>
         <div className="flex flex-wrap gap-1">

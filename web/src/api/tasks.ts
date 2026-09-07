@@ -9,20 +9,13 @@ export interface TaskInput {
   max_per_trade_usdg: string
   min_target_trade_usdg: string
   max_target_trade_usdg: string
-  spend_limit_usdg: string
   max_addon_per_token: number
   sell_mode: 'manual' | 'proportional' | 'all'
   take_profit_bps: number
   take_profit_sell_bps: number
   stop_loss_bps: number
   max_hold_sec: number
-  follow_curve: boolean
-  platforms: string[]
-  quote_assets: string[]
-  max_creator_tax_bps: number
-  skip_launch_window_sec: number
   max_chase_bps: number
-  token_blacklist: string[]
   slippage_bps: number
   retry_max: number
 }

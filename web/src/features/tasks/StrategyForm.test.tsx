@@ -46,10 +46,8 @@ it('resets hidden take-profit fields to defaults when tp is disabled again', asy
 it('lets percent fields accept decimals and keeps count fields integral', async () => {
   render(<StrategyForm defaultValues={defaultStrategy} submitText="创建" onSubmit={vi.fn()} />)
   expect(screen.getByLabelText('滑点（%）')).toHaveAttribute('step', 'any')
-  expect(screen.getByLabelText('创建者税上限（%）')).toHaveAttribute('step', 'any')
   expect(screen.getByLabelText('追价上限（%）')).toHaveAttribute('step', 'any')
   expect(screen.getByLabelText('单币加仓次数')).toHaveAttribute('step', '1')
-  expect(screen.getByLabelText('发射后跳过（秒）')).toHaveAttribute('step', '1')
   expect(screen.getByLabelText('重试次数')).toHaveAttribute('step', '1')
 
   await userEvent.click(screen.getByLabelText('开启止盈止损'))
@@ -120,4 +118,19 @@ it('clears the stale size_value error when switching modes', async () => {
 it('submitDisabled disables the submit button', () => {
   render(<StrategyForm defaultValues={defaultStrategy} submitText="创建" onSubmit={vi.fn()} submitDisabled />)
   expect(screen.getByRole('button', { name: '创建' })).toBeDisabled()
+})
+
+it('no longer shows the removed fields; keeps 追价上限 with its hint', () => {
+  render(<StrategyForm defaultValues={defaultStrategy} submitText="创建" onSubmit={vi.fn()} />)
+  expect(screen.queryByText('总额度（USDG，0=不限）')).not.toBeInTheDocument()
+  expect(screen.queryByText('场所')).not.toBeInTheDocument()
+  expect(screen.queryByText('计价币')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('跟内盘')).not.toBeInTheDocument()
+  expect(screen.queryByText('创建者税上限（%）')).not.toBeInTheDocument()
+  expect(screen.queryByText('发射后跳过（秒）')).not.toBeInTheDocument()
+  expect(screen.queryByText('黑名单地址（每行一个）')).not.toBeInTheDocument()
+
+  expect(screen.getByLabelText('追价上限（%）')).toBeInTheDocument()
+  expect(screen.getByText('含 STOCK 计价信号建议放宽 0.5–1 个百分点')).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: '风险控制' })).toBeInTheDocument()
 })

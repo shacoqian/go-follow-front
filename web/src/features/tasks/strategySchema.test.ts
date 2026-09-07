@@ -1,3 +1,4 @@
+import type { Task } from '@/api/tasks'
 import { defaultStrategy, fromBackend, ratioSummary, strategySchema, targetFilterSummary, toBackend } from './strategySchema'
 
 const ids = { wallet_id: 1, target_id: 2 }
@@ -8,10 +9,38 @@ it('fixed defaults send no bounds and no target filter', () => {
   expect(b).toMatchObject({
     wallet_id: 1, target_id: 2, size_mode: 'fixed', size_value: '10000000',
     max_per_trade_usdg: '0', ratio_min_usdg: '0', min_target_trade_usdg: '0', max_target_trade_usdg: '0',
-    spend_limit_usdg: '0', max_addon_per_token: 1, sell_mode: 'proportional', take_profit_bps: 0, take_profit_sell_bps: 0, stop_loss_bps: 0, max_hold_sec: 0,
-    follow_curve: true, platforms: ['pons_curve', 'pons_pool', 'uniswap'], quote_assets: ['USDG', 'ETH'],
-    max_creator_tax_bps: 200, skip_launch_window_sec: 15, max_chase_bps: 1500, token_blacklist: [], slippage_bps: 1000, retry_max: 2,
+    max_addon_per_token: 1, sell_mode: 'proportional', take_profit_bps: 0, take_profit_sell_bps: 0, stop_loss_bps: 0, max_hold_sec: 0,
+    max_chase_bps: 1500, slippage_bps: 1000, retry_max: 2,
   })
+})
+
+it('toBackend no longer emits removed fields', () => {
+  const body = toBackend(defaultStrategy, ids) as unknown as Record<string, unknown>
+  for (const k of [
+    'spend_limit_usdg',
+    'follow_curve',
+    'platforms',
+    'quote_assets',
+    'max_creator_tax_bps',
+    'skip_launch_window_sec',
+    'token_blacklist',
+  ]) {
+    expect(body).not.toHaveProperty(k)
+  }
+})
+
+it('fromBackend tolerates tasks without removed fields', () => {
+  const t = {
+    ...toBackend(defaultStrategy, ids),
+    id: 1,
+    owner: '0xabc',
+    enabled: true,
+    spent_usdg: '0',
+    consecutive_failures: 0,
+    paused_reason: '',
+    paused_at: null,
+  } as Task
+  expect(() => fromBackend(t)).not.toThrow()
 })
 
 it('ratio mode sends bps (over 100% allowed) with our bounds; fixed ignores bounds even if present', () => {
@@ -63,8 +92,6 @@ it('fixed validation', () => {
   expect(strategySchema.safeParse({ ...defaultStrategy, size_value: 'abc' }).error?.issues[0].message).toBe('金额格式不正确')
   expect(strategySchema.safeParse({ ...defaultStrategy, size_value: '0' }).error?.issues[0].message).toBe('金额必须大于 0')
   expect(strategySchema.safeParse({ ...defaultStrategy, slippage_pct: 0 }).success).toBe(false)
-  expect(strategySchema.safeParse({ ...defaultStrategy, platforms: [] }).success).toBe(false)
-  expect(strategySchema.safeParse({ ...defaultStrategy, token_blacklist: 'nope' }).error?.issues[0].message).toBe('黑名单第 1 行不是合法地址')
   expect(strategySchema.safeParse({ ...defaultStrategy, slippage_pct: NaN }).error?.issues[0].message).toBe('请输入数字')
   expect(strategySchema.safeParse({ ...defaultStrategy, max_addon_per_token: 1.5 }).error?.issues[0].message).toBe('请输入整数')
   expect(strategySchema.safeParse({ ...defaultStrategy, stop_loss_pct: 99.999 }).error?.issues[0].message).toBe('止损比例须小于 100')
@@ -73,7 +100,7 @@ it('fixed validation', () => {
 
 it('round-trips through the backend shape', () => {
   const v = { ...defaultStrategy, size_mode: 'ratio' as const, size_value: '7.5', ratio_min: '2', max_per_trade: '40', target_min: '1', target_max: '',
-    tp_enabled: true, take_profit_pct: 25, take_profit_sell_pct: 40, stop_loss_pct: 10, max_hold_min: 1.5, token_blacklist: '0x1111111111111111111111111111111111111111' }
+    tp_enabled: true, take_profit_pct: 25, take_profit_sell_pct: 40, stop_loss_pct: 10, max_hold_min: 1.5 }
   expect(fromBackend(toBackend(v, ids))).toEqual(v)
   expect(fromBackend(toBackend(defaultStrategy, ids))).toEqual({ ...defaultStrategy, take_profit_sell_pct: 50 })
   // 旧行：fixed 但带非零 max_per_trade（旧封顶值，35 与默认值 20 不同，确保不是巧合读回）→ 回读为 fixed，界面不显示也不带回该值，恒显示默认上限
@@ -92,11 +119,6 @@ it('summaries', () => {
   expect(targetFilterSummary({ ...b, min_target_trade_usdg: '1000000' })).toBe(' · 目标 ≥1 USDG')
   expect(targetFilterSummary({ ...b, max_target_trade_usdg: '100000000' })).toBe(' · 目标 ≤100 USDG')
   expect(targetFilterSummary({ ...b, min_target_trade_usdg: '1000000', max_target_trade_usdg: '100000000' })).toBe(' · 目标 1–100 USDG')
-})
-
-it('parses the blacklist textarea (trim, lowercase, skip blanks)', () => {
-  const b = toBackend({ ...defaultStrategy, token_blacklist: ' 0xABC \n\n0xdef\n' }, ids)
-  expect(b.token_blacklist).toEqual(['0xabc', '0xdef'])
 })
 
 it('numeric percent fields allow at most two decimals', () => {
