@@ -1,3 +1,4 @@
+import type React from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Field } from '@/components/ui/field'
@@ -26,6 +27,10 @@ const SELL_MODE_HINT: Record<StrategyValues['sell_mode'], string> = {
 
 const SELL_MODE_SENTENCE = Object.values(SELL_MODE_HINT).join('；')
 
+// 负号和科学计数法在这些字段里都没有意义：输入时直接拦掉，不等到提交才报错。
+const blockSign = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') e.preventDefault()
+}
 // 数字输入一律显式写 step：type="number" 默认 step=1，浏览器会用原生校验在 submit 之前挡下 0.5
 // 这类小数（表单事件根本不触发）。百分比/分钟字段用 step="any"，次数/秒数字段写明 step="1"。
 // jsdom 不跑原生校验，测试只能断言属性本身。
@@ -80,7 +85,7 @@ export function StrategyForm({
             hint="目标买多少都不管，每笔买这个金额"
             error={errors.size_value?.message}
           >
-            <Input id="size_value" {...register('size_value')} />
+            <Input id="size_value" inputMode="decimal" onKeyDown={blockSign} {...register('size_value')} />
           </Field>
         ) : (
           <>
@@ -90,7 +95,7 @@ export function StrategyForm({
               hint="我方金额 = 目标买入金额 × 比例，可超过 100"
               error={errors.size_value?.message}
             >
-              <Input id="size_value" {...register('size_value')} />
+              <Input id="size_value" inputMode="decimal" onKeyDown={blockSign} {...register('size_value')} />
             </Field>
             <Field
               label="我方下限（USDG，可选）"
@@ -98,7 +103,7 @@ export function StrategyForm({
               hint="算出来低于此值就按此值买"
               error={errors.ratio_min?.message}
             >
-              <Input id="ratio_min" {...register('ratio_min')} />
+              <Input id="ratio_min" inputMode="decimal" onKeyDown={blockSign} {...register('ratio_min')} />
             </Field>
             <Field
               label="我方上限（USDG，必填）"
@@ -106,12 +111,12 @@ export function StrategyForm({
               hint="算出来高于此值就按此值买"
               error={errors.max_per_trade?.message}
             >
-              <Input id="max_per_trade" {...register('max_per_trade')} />
+              <Input id="max_per_trade" inputMode="decimal" onKeyDown={blockSign} {...register('max_per_trade')} />
             </Field>
           </>
         )}
         <Field label="单币加仓次数" htmlFor="max_addon_per_token" error={errors.max_addon_per_token?.message}>
-          <Input id="max_addon_per_token" type="number" step="1" {...register('max_addon_per_token', { valueAsNumber: true })} />
+          <Input id="max_addon_per_token" type="number" min="1" onKeyDown={blockSign} step="1" {...register('max_addon_per_token', { valueAsNumber: true })} />
         </Field>
       </section>
 
@@ -123,7 +128,7 @@ export function StrategyForm({
           hint="目标单笔买入低于此值不跟"
           error={errors.target_min?.message}
         >
-          <Input id="target_min" {...register('target_min')} />
+          <Input id="target_min" inputMode="decimal" onKeyDown={blockSign} {...register('target_min')} />
         </Field>
         <Field
           label="目标最大买入（USDG，可选）"
@@ -131,7 +136,7 @@ export function StrategyForm({
           hint="目标单笔买入高于此值不跟"
           error={errors.target_max?.message}
         >
-          <Input id="target_max" {...register('target_max')} />
+          <Input id="target_max" inputMode="decimal" onKeyDown={blockSign} {...register('target_max')} />
         </Field>
       </section>
 
@@ -161,7 +166,7 @@ export function StrategyForm({
         {tpEnabled && (
           <>
             <Field label="止盈（%）" htmlFor="take_profit_pct" error={errors.take_profit_pct?.message}>
-              <Input id="take_profit_pct" type="number" step="any" {...register('take_profit_pct', { valueAsNumber: true })} />
+              <Input id="take_profit_pct" type="number" min="0" onKeyDown={blockSign} step="any" {...register('take_profit_pct', { valueAsNumber: true })} />
             </Field>
             <Field
               label="止盈卖出比例（%）"
@@ -170,16 +175,16 @@ export function StrategyForm({
             >
               <Input
                 id="take_profit_sell_pct"
-                type="number"
+                type="number" min="0" onKeyDown={blockSign}
                 step="any"
                 {...register('take_profit_sell_pct', { valueAsNumber: true })}
               />
             </Field>
             <Field label="止损（%）" htmlFor="stop_loss_pct" error={errors.stop_loss_pct?.message}>
-              <Input id="stop_loss_pct" type="number" step="any" {...register('stop_loss_pct', { valueAsNumber: true })} />
+              <Input id="stop_loss_pct" type="number" min="0" onKeyDown={blockSign} step="any" {...register('stop_loss_pct', { valueAsNumber: true })} />
             </Field>
             <Field label="最长持仓（分钟）" htmlFor="max_hold_min" error={errors.max_hold_min?.message}>
-              <Input id="max_hold_min" type="number" step="any" {...register('max_hold_min', { valueAsNumber: true })} />
+              <Input id="max_hold_min" type="number" min="0" onKeyDown={blockSign} step="any" {...register('max_hold_min', { valueAsNumber: true })} />
             </Field>
           </>
         )}
@@ -193,13 +198,13 @@ export function StrategyForm({
           hint="含 STOCK 计价信号建议放宽 0.5–1 个百分点"
           error={errors.max_chase_pct?.message}
         >
-          <Input id="max_chase_pct" type="number" step="any" {...register('max_chase_pct', { valueAsNumber: true })} />
+          <Input id="max_chase_pct" type="number" min="0" onKeyDown={blockSign} step="any" {...register('max_chase_pct', { valueAsNumber: true })} />
         </Field>
         <Field label="滑点（%）" htmlFor="slippage_pct" error={errors.slippage_pct?.message}>
-          <Input id="slippage_pct" type="number" step="any" {...register('slippage_pct', { valueAsNumber: true })} />
+          <Input id="slippage_pct" type="number" min="0.01" onKeyDown={blockSign} step="any" {...register('slippage_pct', { valueAsNumber: true })} />
         </Field>
         <Field label="重试次数" htmlFor="retry_max" error={errors.retry_max?.message}>
-          <Input id="retry_max" type="number" step="1" {...register('retry_max', { valueAsNumber: true })} />
+          <Input id="retry_max" type="number" min="0" onKeyDown={blockSign} step="1" {...register('retry_max', { valueAsNumber: true })} />
         </Field>
       </section>
 

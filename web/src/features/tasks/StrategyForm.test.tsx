@@ -134,3 +134,18 @@ it('no longer shows the removed fields; keeps 追价上限 with its hint', () =>
   expect(screen.getByText('含 STOCK 计价信号建议放宽 0.5–1 个百分点')).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: '风险控制' })).toBeInTheDocument()
 })
+
+it('numeric inputs carry min attributes and refuse a minus sign while typing', async () => {
+  render(<StrategyForm defaultValues={defaultStrategy} submitText="创建" onSubmit={vi.fn()} />)
+  expect(screen.getByLabelText('单币加仓次数')).toHaveAttribute('min', '1')
+  expect(screen.getByLabelText('滑点（%）')).toHaveAttribute('min', '0.01')
+  expect(screen.getByLabelText('追价上限（%）')).toHaveAttribute('min', '0')
+  const addon = screen.getByLabelText('单币加仓次数') as HTMLInputElement
+  await userEvent.clear(addon)
+  await userEvent.type(addon, '-3')
+  expect(addon.value).toBe('3')
+  const size = screen.getByLabelText('固定金额（USDG）') as HTMLInputElement
+  await userEvent.clear(size)
+  await userEvent.type(size, '-5')
+  expect(size.value).toBe('5')
+})
