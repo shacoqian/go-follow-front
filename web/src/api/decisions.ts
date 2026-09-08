@@ -17,6 +17,11 @@ export interface Decision {
   t_quoted: string | null
   error: string
   created_at: string
+  tx_id: number | null
+  tx_hash: string
+  filled_in: string
+  filled_out: string
+  gas_used: number
 }
 
 export const decisionsApi = {

@@ -10,8 +10,9 @@ import { useTasks } from '@/features/tasks/useTasks'
 import { useTargets } from '@/features/targets/useTargets'
 import { useWallets } from '@/features/wallets/useWallets'
 import { unitsToUsdg } from '@/lib/amount'
-import { fmtPrice, fmtTime } from '@/lib/format'
-import { outcomeTone, OUTCOMES } from './outcome'
+import { fmtPrice, fmtTime, shortAddress } from '@/lib/format'
+import { txUrl } from '@/lib/explorer'
+import { outcomeTone, OUTCOMES, fillSummary, reasonBadgeLabel } from './outcome'
 import { taskOptions as buildTaskOptions } from './taskLabel'
 
 const LIMIT_START = 50
@@ -67,21 +68,43 @@ export default function DecisionsPage() {
         ) : query.isError ? (
           <p className="text-sm text-red-600">加载失败</p>
         ) : (
-          <Table head={['时间', '方向', '结果', '原因', '计划买入', '报价得到', '报价均价', '错误']}>
-            {rows.map((d) => (
-              <Tr key={d.id}>
-                <Td>{fmtTime(d.created_at)}</Td>
-                <Td>{d.side}</Td>
-                <Td>
-                  <Badge tone={outcomeTone(d.outcome)}>{d.outcome}</Badge>
-                </Td>
-                <Td>{d.reason}</Td>
-                <Td>{d.side === 'SELL' ? '—' : unitsToUsdg(d.planned_amount_in)}</Td>
-                <Td>{d.quoted_out}</Td>
-                <Td>{fmtPrice(d.quoted_price_usdg)}</Td>
-                <Td>{d.error}</Td>
-              </Tr>
-            ))}
+          <Table head={['时间', '方向', '结果', '原因', '计划买入', '成交', '交易', 'gas', '报价得到', '报价均价', '错误']}>
+            {rows.map((d) => {
+              const txLink = d.tx_hash ? txUrl(d.tx_hash) : null
+              const capped = reasonBadgeLabel(d.reason)
+              return (
+                <Tr key={d.id}>
+                  <Td>{fmtTime(d.created_at)}</Td>
+                  <Td>{d.side}</Td>
+                  <Td>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge tone={outcomeTone(d.outcome)}>{d.outcome}</Badge>
+                      {capped && <Badge tone="amber">{capped}</Badge>}
+                    </div>
+                  </Td>
+                  <Td>{d.reason}</Td>
+                  <Td>{d.side === 'SELL' ? '—' : unitsToUsdg(d.planned_amount_in)}</Td>
+                  <Td>{fillSummary(d)}</Td>
+                  <Td>
+                    {d.tx_hash ? (
+                      txLink ? (
+                        <a className="font-mono underline" href={txLink} target="_blank" rel="noreferrer">
+                          {shortAddress(d.tx_hash)}
+                        </a>
+                      ) : (
+                        <span className="font-mono">{shortAddress(d.tx_hash)}</span>
+                      )
+                    ) : (
+                      '—'
+                    )}
+                  </Td>
+                  <Td>{d.gas_used || '—'}</Td>
+                  <Td>{d.quoted_out}</Td>
+                  <Td>{fmtPrice(d.quoted_price_usdg)}</Td>
+                  <Td>{d.error}</Td>
+                </Tr>
+              )
+            })}
           </Table>
         )}
       </div>

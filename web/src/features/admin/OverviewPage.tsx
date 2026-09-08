@@ -124,6 +124,7 @@ export default function OverviewPage() {
             <MetricCard label="开仓数">{ov.positions_open}</MetricCard>
             <MetricCard label="今日决策">{ov.decisions_today}</MetricCard>
             <MetricCard label="累计花费 USDG">{unitsToUsdg(ov.spent_usdg)}</MetricCard>
+            <MetricCard label="可用 operator">{ov.engine.operators_ready}</MetricCard>
           </div>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">

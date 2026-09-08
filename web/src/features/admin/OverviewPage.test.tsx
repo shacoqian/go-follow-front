@@ -10,7 +10,7 @@ import { makeQueryClient } from '@/app/queryClient'
 import OverviewPage from './OverviewPage'
 
 const ov: Overview = { tasks: 13, tasks_enabled: 12, positions_open: 4, decisions_today: 77, spent_usdg: '123456789',
-  engine: { engine_last_block: 100, node_block: 150, last_signal_at: '2026-09-06T08:41:24Z', kill_switch: false, dry_run: true, stock_tokens: 13, targets: 15, exit_scan_last_at: null, exit_scan_errors: 2, exit_scan_backoff: 1, positions_blocked: 1, goswapevm_error: 'unhealthy' } }
+  engine: { engine_last_block: 100, node_block: 150, last_signal_at: '2026-09-06T08:41:24Z', kill_switch: false, dry_run: true, stock_tokens: 13, targets: 15, exit_scan_last_at: null, exit_scan_errors: 2, exit_scan_backoff: 1, positions_blocked: 1, goswapevm_error: 'unhealthy', operators_ready: 3 } }
 
 function renderPage() {
   return render(<QueryClientProvider client={makeQueryClient()}><OverviewPage /></QueryClientProvider>)
@@ -30,6 +30,8 @@ it('shows metric cards, engine lag warning and errors', async () => {
   expect(screen.getByText('100 / 150')).toBeInTheDocument()
   expect(screen.getByText('落后 50 块')).toBeInTheDocument()
   expect(screen.getByText('unhealthy')).toBeInTheDocument()
+  expect(screen.getByText('可用 operator')).toBeInTheDocument()
+  expect(screen.getByText('3')).toBeInTheDocument()
 })
 
 it('toggles kill_switch with confirmation', async () => {

@@ -15,7 +15,7 @@ import { decisionsApi, type Decision } from '@/api/decisions'
 import { makeQueryClient } from '@/app/queryClient'
 import DecisionsPage from './DecisionsPage'
 
-const d = (id: number, outcome: string, reason = 'x'): Decision => ({ id, signal_id: 1, task_id: 10, side: 'BUY', outcome, reason, planned_amount_in: '10000000', planned_min_out: '0', quoted_out: '420', quoted_price_usdg: 23809.5, t_seen: '2026-09-06T08:41:24Z', t_decided: null, t_quoted: null, error: outcome === 'FAILED' ? 'boom' : '', created_at: '2026-09-06T08:41:24Z' })
+const d = (id: number, outcome: string, reason = 'x'): Decision => ({ id, signal_id: 1, task_id: 10, side: 'BUY', outcome, reason, planned_amount_in: '10000000', planned_min_out: '0', quoted_out: '420', quoted_price_usdg: 23809.5, t_seen: '2026-09-06T08:41:24Z', t_decided: null, t_quoted: null, error: outcome === 'FAILED' ? 'boom' : '', created_at: '2026-09-06T08:41:24Z', tx_id: null, tx_hash: '', filled_in: '0', filled_out: '0', gas_used: 0 })
 
 function renderPage() {
   return render(
@@ -55,4 +55,32 @@ it('formats the quoted price to 6 decimal places without trailing zeros', async 
   vi.mocked(decisionsApi.list).mockResolvedValue([odd])
   renderPage()
   expect(await screen.findByText('33.333333')).toBeInTheDocument()
+})
+
+it('offers PENDING/SENT/EXECUTED in the outcome filter', async () => {
+  vi.mocked(decisionsApi.list).mockResolvedValue([])
+  renderPage()
+  await screen.findByLabelText('结果')
+  expect(screen.getByRole('option', { name: 'PENDING' })).toBeInTheDocument()
+  expect(screen.getByRole('option', { name: 'SENT' })).toBeInTheDocument()
+  expect(screen.getByRole('option', { name: 'EXECUTED' })).toBeInTheDocument()
+})
+
+it('shows filled amounts, a tx hash and gas, and flags a capped buy without turning it into a skip', async () => {
+  const executed: Decision = {
+    ...d(5, 'EXECUTED', 'capped'),
+    filled_in: '9000000',
+    filled_out: '123456',
+    gas_used: 21000,
+    tx_id: 7,
+    tx_hash: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+  }
+  vi.mocked(decisionsApi.list).mockResolvedValue([executed])
+  renderPage()
+  const row = (await screen.findByText('已截断')).closest('tr')!
+  const { within } = await import('@testing-library/react')
+  expect(within(row).getByText('EXECUTED')).toBeInTheDocument()
+  expect(within(row).getByText('花 9 USDG 得 123456')).toBeInTheDocument()
+  expect(within(row).getByText('0xdead…beef')).toBeInTheDocument()
+  expect(within(row).getByText('21000')).toBeInTheDocument()
 })

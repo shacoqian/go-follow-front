@@ -22,6 +22,8 @@ export interface SellResult {
   reason: string
   sell_qty: string
   quoted_out: string
+  // 实盘（outcome=SENT）时才有：交易已广播，前端按它/决策状态轮询成交结果。
+  tx_id?: number
 }
 
 export const positionsApi = {

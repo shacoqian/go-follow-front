@@ -25,7 +25,30 @@ export interface Overview {
     positions_blocked: number
     node_error?: string
     goswapevm_error?: string
+    operators_ready: number
   }
+}
+
+// operator 系统钱包（签 SWAP 的 gas 钱包）。owner 恒为空串，不属于任何用户。
+export interface Operator {
+  id: number
+  address: string
+  label: string
+  enabled: boolean
+  registered: boolean
+  in_flight: number
+  removed: boolean
+  removed_reason: string
+  created_at: string
+  eth_balance: string
+  eth_error?: string
+}
+
+export interface ExecStatus {
+  operators_ready: number
+  allowance_cache_entries: number
+  daily_spent: { wallet_id: number; spent_usdg: string }[]
+  since?: string
 }
 
 export interface AdminUser {
@@ -68,4 +91,13 @@ export const adminApi = {
   audit: (p: { owner?: string; action?: string; limit: number }) =>
     request<AuditRow[]>('GET', `/admin/audit${qs({ owner: p.owner, action: p.action, limit: p.limit })}`, undefined),
   setSetting: (key: 'kill_switch' | 'dry_run', on: boolean) => request<void>('PUT', `/settings/${key}`, { on }),
+  operators: () => request<Operator[]>('GET', '/admin/operators', undefined),
+  createOperator: () => request<{ id: number; address: string }>('POST', '/admin/operators', undefined),
+  setOperatorEnabled: (id: number, on: boolean) =>
+    request<{ ok: boolean; id: number; enabled: boolean }>('POST', `/admin/operators/${id}/${on ? 'enable' : 'disable'}`, undefined),
+  deleteOperator: (id: number, force?: boolean) =>
+    request<void>('DELETE', `/admin/operators/${id}${force ? '?force=1' : ''}`, undefined),
+  operatorWithdraw: (id: number, amount: string) =>
+    request<{ ok?: boolean }>('POST', `/admin/operators/${id}/withdraw`, { amount }, { timeoutMs: 90_000 }),
+  execStatus: () => request<ExecStatus>('GET', '/exec/status', undefined),
 }

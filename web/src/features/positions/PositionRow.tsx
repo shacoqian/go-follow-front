@@ -1,4 +1,7 @@
+import { useQuery } from '@tanstack/react-query'
 import type { Position } from '@/api/positions'
+import { decisionsApi } from '@/api/decisions'
+import { healthApi } from '@/api/health'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tr, Td } from '@/components/ui/table'
@@ -6,11 +9,24 @@ import { CopyButton } from '@/components/CopyButton'
 import { unitsToUsdg } from '@/lib/amount'
 import { fmtPrice, shortAddress } from '@/lib/format'
 import { addressUrl } from '@/lib/explorer'
-import { exitBlockedText } from './exitState'
+import { exitBlockedText, positionInFlight, dryRunLeftover } from './exitState'
 
 export function PositionRow({ position: p, onSell }: { position: Position; onSell(): void }) {
   const url = addressUrl(p.token)
   const blocked = exitBlockedText(p)
+
+  // 与 Banner 共用 ['health'] 缓存：判断是否已从 dry-run 切到实盘。
+  const health = useQuery({ queryKey: ['health'], queryFn: healthApi.get, refetchInterval: 10_000, meta: { silent: true } })
+  // 决策没有 token 字段，只能按任务近似判断在途，见 exitState.ts 的 positionInFlight 注释。
+  const decisions = useQuery({
+    queryKey: ['decisions', p.task_id, 'recent'],
+    queryFn: () => decisionsApi.list({ task: p.task_id, limit: 50 }),
+    refetchInterval: 10_000,
+    meta: { silent: true },
+  })
+  const inFlight = positionInFlight(p, decisions.data ?? [])
+  const leftover = dryRunLeftover(p, health.data?.dry_run)
+
   return (
     <Tr>
       <Td>
@@ -31,7 +47,8 @@ export function PositionRow({ position: p, onSell }: { position: Position; onSel
       <Td>{p.addon_count}</Td>
       <Td>
         <div className="flex flex-wrap gap-1">
-          {p.virtual && <Badge tone="gray">dry-run</Badge>}
+          {inFlight && <Badge tone="blue">在途</Badge>}
+          {leftover ? <Badge tone="amber">dry-run 遗留</Badge> : p.virtual && <Badge tone="gray">dry-run</Badge>}
           {p.tp_done && <Badge tone="blue">已止盈</Badge>}
           {blocked && <Badge tone="amber">{blocked}</Badge>}
         </div>

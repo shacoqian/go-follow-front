@@ -87,6 +87,7 @@ export function SellDialog({
         {result && (
           <p className="text-sm">
             结果 {result.outcome}（{result.reason}）· 卖出 {result.sell_qty} · 预计得到 {unitsToUsdg(result.quoted_out)} USDG
+            {result.outcome === 'SENT' && result.tx_id !== undefined && <> · 已广播，等待回执（tx_id {result.tx_id}）</>}
           </p>
         )}
       </div>

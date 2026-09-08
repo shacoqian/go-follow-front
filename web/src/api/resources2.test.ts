@@ -68,6 +68,29 @@ it('admin routes', async () => {
   ])
 })
 
+it('admin operator / exec routes', async () => {
+  await adminApi.operators()
+  await adminApi.createOperator()
+  await adminApi.setOperatorEnabled(4, true)
+  await adminApi.setOperatorEnabled(4, false)
+  await adminApi.deleteOperator(4)
+  await adminApi.deleteOperator(4, true)
+  await adminApi.operatorWithdraw(4, '1000000000000000000')
+  await adminApi.operatorWithdraw(4, 'all')
+  await adminApi.execStatus()
+  expect(req.mock.calls.map((c) => c.slice(0, 3))).toEqual([
+    ['GET', '/admin/operators', undefined],
+    ['POST', '/admin/operators', undefined],
+    ['POST', '/admin/operators/4/enable', undefined],
+    ['POST', '/admin/operators/4/disable', undefined],
+    ['DELETE', '/admin/operators/4', undefined],
+    ['DELETE', '/admin/operators/4?force=1', undefined],
+    ['POST', '/admin/operators/4/withdraw', { amount: '1000000000000000000' }],
+    ['POST', '/admin/operators/4/withdraw', { amount: 'all' }],
+    ['GET', '/exec/status', undefined],
+  ])
+})
+
 it('blacklist routes', async () => {
   await blacklistApi.get()
   await blacklistApi.put(['0xa'])
