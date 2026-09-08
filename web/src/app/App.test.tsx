@@ -28,6 +28,7 @@ vi.mock('@/api/admin', () => ({
     enableTask: vi.fn(),
     disableTask: vi.fn(),
     audit: vi.fn(),
+    logs: vi.fn(),
     operators: vi.fn(),
     createOperator: vi.fn(),
     setOperatorEnabled: vi.fn(),
@@ -131,6 +132,19 @@ it('shows Operator 钱包 for admins and guards /admin/operators for users', asy
 
   useSession.getState().setSession({ token: 't', address: '0xabc', role: 'user', expiresAt: '' })
   renderAt('/admin/operators')
+  expect(await screen.findAllByRole('heading', { name: '钱包' })).not.toHaveLength(0)
+})
+
+it('shows 日志 for admins and guards /admin/logs for users', async () => {
+  useSession.getState().setSession({ token: 't', address: '0xabc', role: 'admin', expiresAt: '' })
+  const first = renderAt('/admin/logs')
+  expect(await screen.findByRole('heading', { name: '日志' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: '日志' })).toHaveAttribute('href', '/admin/logs')
+  expect(adminApi.logs).not.toHaveBeenCalled()
+  first.unmount()
+
+  useSession.getState().setSession({ token: 't', address: '0xabc', role: 'user', expiresAt: '' })
+  renderAt('/admin/logs')
   expect(await screen.findAllByRole('heading', { name: '钱包' })).not.toHaveLength(0)
 })
 

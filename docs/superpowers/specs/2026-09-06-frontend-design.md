@@ -272,3 +272,17 @@ zod schema 一处定义，同时导出表单类型与提交换算。界面单位
   - `删除` 先弹 `ConfirmDialog`（标题“删除 operator”，说明“删除后私钥无法找回，请确认已提回 ETH 并在掌钥机撤销登记”，确认按钮“确认删除”）→ `DELETE /admin/operators/:id`；409 关掉确认框，在该行行内展示错误原文；后端共六种 409 文案，分两类：`请先停用该 operator`、`仍有在途交易` 在后端读 `force` 参数之前就返回，带 `force=1` 重试没有意义，只展示文案，不出现 `强制删除`；`链上登记状态未知，请稍后重试或带 force=1`、`请先在掌钥机撤销登记`、`余额未知`、`钱包仍有余额，请先提回` 这四种都在 `!force` 分支里，才出现 `强制删除` 按钮，点击后带 `force=true` 直接重试（不再二次确认）。
   - `提回 ETH` 打开 `OperatorWithdrawDialog`：金额（ETH）输入或勾选“全部”（发 `"all"`）→ `POST /admin/operators/:id/withdraw {amount}`（收款地址恒为管理员登录地址，后端决定、前端不传）；200/202 都要处理（复用 `walletsApi.withdraw` 的 `requestFull` 模式），成功 toast“已提交提回”，展示状态角标（复用 `withdrawStatus.ts` 的 `statusTone`/`statusText`）与哈希（区块浏览器链接或原文+复制按钮）。
 - 类型：`Operator`（`id, address, label, enabled, registered, in_flight, removed, removed_reason, created_at, eth_balance, eth_error?`）、`ExecStatus`（`operators_ready, allowance_cache_entries, daily_spent: {wallet_id, spent_usdg}[], since?`）定义在 `api/admin.ts`；`Decision` 加 `token, tx_id, tx_hash, filled_in, filled_out, gas_used`；`SellResult` 加 `tx_id?`。
+
+## 实现修订（2026-09-08，计划 H）
+
+新增管理员日志检索页，依赖 go-follow ≥ `ed677b6`（新增只读接口 `GET /admin/logs`，不写审计）。
+
+- 新增 §6.2 日志页（`/admin/logs`，仅管理员，导航“管理”组紧跟在“审计”之后，标签 `日志`）：
+  - 筛选：关键字（占位“逗号分隔，多个关键字同时满足”）、级别（全部/DEBUG/INFO/WARN/ERROR）、开始时间/结束时间（`datetime-local`）、条数（默认 100，1–500）、去重字段（可选）；按钮“查询”。
+  - 查询由按钮触发，不轮询：维护一个仅在点击“查询”时更新的 `submitted` 参数状态，`useQuery({ queryKey: ['admin','logs', submitted], queryFn: () => adminApi.logs(submitted!), enabled: submitted !== null, meta: { silent: true } })`——`submitted` 变化即换新 query key 自动发起请求，无需额外 `refetch()`。
+  - `datetime-local` 的值不带时区，提交时用 `new Date(v).toISOString()` 转成 RFC3339（即按浏览器本地时区解释后换算成 UTC）。
+  - 结果头“共 {total} 条，扫描 {files.length} 个文件”，`total` 上有 `title`：“按文件尾部有限扫描的匹配数”（对应后端 `logsearch.Result.Total` 的说明：受有界扫描限制，不代表真实匹配总数）。
+  - 表格列：时间、级别（角标：`ERROR` 红、`WARN` 琥珀、`INFO`/`DEBUG` 灰，大小写不敏感）、模块、消息；空结果文案“没有匹配的日志”（复用 `Table` 组件的 `empty` 属性）。
+  - 行点击展开/收起该条日志除 `ts`/`level`/`module`/`msg`/`caller` 之外的其余字段（键值列表；值为对象或数组时 `JSON.stringify`，其余原样转字符串），点开的一行以第二个 `<tr>` 形式插在原行下方。
+  - 错误：`query.isError` 时行内展示 `role="alert"`（`meta.silent`，不走全局 toast），文案取 `ApiError.message`——后端 400（`limit 须在 1–500`、`from/to 须为 RFC3339`、`level 非法`）与 503（`日志检索未配置`）都原样透出。
+- `api/admin.ts` 新增 `LogEntry`（`Record<string, unknown>`）、`LogSearchResult`（`{total, files, entries}`）与 `adminApi.logs(p: {q?, level?, from?, to?, limit, dedup?})`，`qs()` 只拼非空参数，顺序固定为 `q, level, from, to, limit, dedup`。

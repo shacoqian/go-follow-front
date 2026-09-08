@@ -104,6 +104,28 @@ it('operator withdraw uses requestFull so a 202 (broadcast uncertain) survives',
   expect(r.status).toBe(202)
 })
 
+it('admin logs builds query strings with only present params in order q, level, from, to, limit, dedup', async () => {
+  await adminApi.logs({ limit: 100 })
+  await adminApi.logs({ q: 'a,b', level: 'WARN', limit: 100 })
+  await adminApi.logs({
+    q: 'timeout',
+    level: 'ERROR',
+    from: '2026-09-08T00:00:00Z',
+    to: '2026-09-08T10:00:00Z',
+    limit: 200,
+    dedup: 'module',
+  })
+  expect(req.mock.calls.map((c) => c.slice(0, 3))).toEqual([
+    ['GET', '/admin/logs?limit=100', undefined],
+    ['GET', '/admin/logs?q=a%2Cb&level=WARN&limit=100', undefined],
+    [
+      'GET',
+      '/admin/logs?q=timeout&level=ERROR&from=2026-09-08T00%3A00%3A00Z&to=2026-09-08T10%3A00%3A00Z&limit=200&dedup=module',
+      undefined,
+    ],
+  ])
+})
+
 it('blacklist routes', async () => {
   await blacklistApi.get()
   await blacklistApi.put(['0xa'])

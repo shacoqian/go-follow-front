@@ -73,6 +73,15 @@ export interface AuditRow {
   created_at: string
 }
 
+// entries 至少有 ts/level/module/msg/caller，其余字段任意（见 logsearch.Result）。
+export type LogEntry = Record<string, unknown>
+
+export interface LogSearchResult {
+  total: number
+  files: string[]
+  entries: LogEntry[]
+}
+
 export const adminApi = {
   overview: () => request<Overview>('GET', '/admin/overview', undefined),
   users: () => request<AdminUser[]>('GET', '/admin/users', undefined),
@@ -90,6 +99,12 @@ export const adminApi = {
   disableTask: (id: number) => request<void>('POST', `/admin/tasks/${id}/disable`, undefined),
   audit: (p: { owner?: string; action?: string; limit: number }) =>
     request<AuditRow[]>('GET', `/admin/audit${qs({ owner: p.owner, action: p.action, limit: p.limit })}`, undefined),
+  logs: (p: { q?: string; level?: string; from?: string; to?: string; limit: number; dedup?: string }) =>
+    request<LogSearchResult>(
+      'GET',
+      `/admin/logs${qs({ q: p.q, level: p.level, from: p.from, to: p.to, limit: p.limit, dedup: p.dedup })}`,
+      undefined,
+    ),
   setSetting: (key: 'kill_switch' | 'dry_run', on: boolean) => request<void>('PUT', `/settings/${key}`, { on }),
   operators: () => request<Operator[]>('GET', '/admin/operators', undefined),
   createOperator: () => request<{ id: number; address: string }>('POST', '/admin/operators', undefined),

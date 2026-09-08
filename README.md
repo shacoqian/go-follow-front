@@ -71,6 +71,17 @@ npm run build      # 产物在 web/dist
 
 依赖 go-follow ≥ `549afa3`（`/decisions` 返回 `token`，仓位页按 `(task_id, token)` 精确匹配判断在途；更早版本的决策行没有这个字段会导致仓位页报错）。
 
+## 日志
+
+管理员可在「管理 → 日志」页（`/admin/logs`）检索后端日志，走只读接口 `GET /admin/logs?q=&level=&from=&to=&limit=&dedup=`，不写审计。
+
+- 筛选：关键字（逗号分隔，多个关键字同时满足，AND 匹配）、级别（全部/DEBUG/INFO/WARN/ERROR，按最低级别过滤）、开始/结束时间（`datetime-local`，提交时用 `new Date(v).toISOString()` 转成 RFC3339，即带上当前时区偏移换算成 UTC）、条数（默认 100，1–500）、去重字段（可选，按该字段保留时间最新的一条）。查询由「查询」按钮触发，不轮询。
+- 结果表格显示时间、级别角标（`ERROR` 红、`WARN` 琥珀、`INFO`/`DEBUG` 灰）、模块、消息；点击一行展开该条日志除 `ts/level/module/msg/caller` 之外的其余字段（键值列表，值为对象时 `JSON.stringify`）。
+- 表头显示「共 {total} 条，扫描 {files.length} 个文件」，`total` 上有提示：受后端有界扫描限制，不代表整个日志历史的真实匹配总数。
+- 后端参数校验失败（如 `limit` 超出 1–500、`from`/`to` 不是 RFC3339、`level` 非法）就地展示错误原文，不走全局提示；日志检索未配置时返回 503「日志检索未配置」。
+
+依赖 go-follow ≥ `ed677b6`（新增 `GET /admin/logs`）。
+
 ## 构建与运行
 
 ```bash
