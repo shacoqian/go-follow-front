@@ -152,7 +152,7 @@ export default function LogsPage() {
                   <Tr key={`row-${i}`} className="cursor-pointer" onClick={() => setExpanded(expanded === i ? null : i)}>
                     <Td>{fmtTime(strField(entry, 'ts'))}</Td>
                     <Td>
-                      <Badge tone={levelTone(rowLevel)}>{rowLevel}</Badge>
+                      <Badge tone={levelTone(rowLevel)}>{rowLevel.toUpperCase()}</Badge>
                     </Td>
                     <Td>{strField(entry, 'module')}</Td>
                     <Td>{strField(entry, 'msg')}</Td>
