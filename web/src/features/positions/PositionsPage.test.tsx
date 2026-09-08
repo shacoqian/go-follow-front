@@ -31,7 +31,7 @@ const pos: Position = {
   tp_done: false,
   realized_usdg: '0',
   virtual: true,
-  updated_at: '',
+  updated_at: '2026-09-06T00:00:00Z',
   exit_fail_count: 2,
   last_exit_error: 'reserve_short',
   next_exit_at: '2026-09-06T04:34:00Z',
@@ -120,7 +120,7 @@ it('shows a broadcast-pending message with the tx id when a manual sell comes ba
 
 it('shows an 在途 badge when a pending/sent decision for the task is newer than the position', async () => {
   const sent: Decision = {
-    id: 1, signal_id: null, task_id: 10, side: 'BUY', outcome: 'SENT', reason: '', planned_amount_in: '0',
+    id: 1, signal_id: null, task_id: 10, token: pos.token, side: 'BUY', outcome: 'SENT', reason: '', planned_amount_in: '0',
     planned_min_out: '0', quoted_out: '0', quoted_price_usdg: 0, t_seen: null, t_decided: null, t_quoted: null,
     error: '', created_at: '2026-09-07T00:00:00Z', tx_id: 3, tx_hash: '', filled_in: '0', filled_out: '0', gas_used: 0,
   }
@@ -128,6 +128,20 @@ it('shows an 在途 badge when a pending/sent decision for the task is newer tha
   renderPage()
   const row = (await screen.findByText('0x3333…3333')).closest('tr')!
   expect(await within(row).findByText('在途')).toBeInTheDocument()
+})
+
+it('does not mark 在途 for a pending/sent decision on a different token in the same task', async () => {
+  const sentOtherToken: Decision = {
+    id: 2, signal_id: null, task_id: 10, token: '0x4444444444444444444444444444444444444444', side: 'BUY', outcome: 'SENT',
+    reason: '', planned_amount_in: '0', planned_min_out: '0', quoted_out: '0', quoted_price_usdg: 0, t_seen: null,
+    t_decided: null, t_quoted: null, error: '', created_at: '2026-09-07T00:00:00Z', tx_id: 4, tx_hash: '',
+    filled_in: '0', filled_out: '0', gas_used: 0,
+  }
+  vi.mocked(decisionsApi.list).mockResolvedValue([sentOtherToken])
+  renderPage()
+  const row = (await screen.findByText('0x3333…3333')).closest('tr')!
+  await within(row).findByText('dry-run') // 等页面稳定渲染完
+  expect(within(row).queryByText('在途')).not.toBeInTheDocument()
 })
 
 it('shows a dry-run 遗留 badge for a virtual position once the engine is confirmed live', async () => {

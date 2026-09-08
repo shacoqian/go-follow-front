@@ -25,13 +25,38 @@ it('formats blocked state', () => {
   )
 })
 
-const dec = (outcome: string, created_at: string): Pick<Decision, 'outcome' | 'created_at'> => ({ outcome, created_at })
+const pos = (task_id: number, token: string, updated_at: string): Pick<Position, 'task_id' | 'token' | 'updated_at'> => ({
+  task_id,
+  token,
+  updated_at,
+})
+const dec = (
+  task_id: number,
+  token: string,
+  outcome: string,
+  created_at: string,
+): Pick<Decision, 'task_id' | 'token' | 'outcome' | 'created_at'> => ({ task_id, token, outcome, created_at })
 
-it('marks a position in flight only when a newer PENDING/SENT decision exists for the task', () => {
-  expect(positionInFlight({ updated_at: '2026-09-06T00:00:00Z' }, [])).toBe(false)
-  expect(positionInFlight({ updated_at: '2026-09-06T00:00:00Z' }, [dec('SKIPPED', '2026-09-07T00:00:00Z')])).toBe(false)
-  expect(positionInFlight({ updated_at: '2026-09-06T00:00:00Z' }, [dec('SENT', '2026-09-07T00:00:00Z')])).toBe(true)
-  expect(positionInFlight({ updated_at: '2026-09-06T00:00:00Z' }, [dec('PENDING', '2026-09-05T00:00:00Z')])).toBe(false)
+it('marks a position in flight only for a newer PENDING/SENT decision on the same task+token', () => {
+  expect(positionInFlight(pos(1, '0xAAA', '2026-09-06T00:00:00Z'), [])).toBe(false)
+  expect(positionInFlight(pos(1, '0xAAA', '2026-09-06T00:00:00Z'), [dec(1, '0xaaa', 'SKIPPED', '2026-09-07T00:00:00Z')])).toBe(
+    false,
+  )
+  expect(positionInFlight(pos(1, '0xAAA', '2026-09-06T00:00:00Z'), [dec(1, '0xaaa', 'SENT', '2026-09-07T00:00:00Z')])).toBe(
+    true,
+  )
+  // 更新时间比决策还新：已经收尾过了，不在途
+  expect(positionInFlight(pos(1, '0xAAA', '2026-09-06T00:00:00Z'), [dec(1, '0xaaa', 'PENDING', '2026-09-05T00:00:00Z')])).toBe(
+    false,
+  )
+  // 同一任务但不同代币：不匹配
+  expect(positionInFlight(pos(1, '0xAAA', '2026-09-06T00:00:00Z'), [dec(1, '0xbbb', 'SENT', '2026-09-07T00:00:00Z')])).toBe(
+    false,
+  )
+  // 同一代币但不同任务：不匹配
+  expect(positionInFlight(pos(1, '0xAAA', '2026-09-06T00:00:00Z'), [dec(2, '0xaaa', 'SENT', '2026-09-07T00:00:00Z')])).toBe(
+    false,
+  )
 })
 
 it('flags a virtual position as dry-run leftover only once the mode is confirmed live', () => {

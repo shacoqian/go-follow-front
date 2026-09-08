@@ -10,19 +10,22 @@ export function exitBlockedText(p: Position): string | null {
   return `${base}，下次尝试 ${fmtTime(p.next_exit_at).slice(11, 16)}`
 }
 
-// 决策没有 token 字段，无法精确按代币匹配，这里是近似：只要该任务最近 50 条决策里
-// 有比这条仓位更新时间更新的 PENDING/SENT，就把仓位标"在途"——同一任务下并发跟卖多个
-// 代币时可能会把不相关的仓位一起标上，已知的近似，见任务报告。
+// 仓位标"在途"：该任务下同一代币（大小写不敏感，链上地址不保证大小写一致）最近一条
+// PENDING/SENT 决策，比这条仓位的 updated_at 更新——回执落地前 updated_at 不会推进，
+// 落地后引擎会重新记账并推进 updated_at，标记随之消失。
 export function positionInFlight(
-  p: Pick<Position, 'updated_at'>,
-  decisions: Pick<Decision, 'outcome' | 'created_at'>[],
+  p: Pick<Position, 'task_id' | 'token' | 'updated_at'>,
+  decisions: Pick<Decision, 'task_id' | 'token' | 'outcome' | 'created_at'>[],
 ): boolean {
-  let latest: string | null = null
+  const token = p.token.toLowerCase()
+  let latest: number | null = null
   for (const dec of decisions) {
     if (dec.outcome !== 'PENDING' && dec.outcome !== 'SENT') continue
-    if (!latest || dec.created_at > latest) latest = dec.created_at
+    if (dec.task_id !== p.task_id || dec.token.toLowerCase() !== token) continue
+    const t = Date.parse(dec.created_at)
+    if (latest === null || t > latest) latest = t
   }
-  return latest !== null && p.updated_at < latest
+  return latest !== null && Date.parse(p.updated_at) < latest
 }
 
 // dry-run 切到实盘后，虚拟仓位不再参与退出扫描/跟卖，页面标"dry-run 遗留"（只读展示）。

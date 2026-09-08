@@ -15,7 +15,7 @@ import { decisionsApi, type Decision } from '@/api/decisions'
 import { makeQueryClient } from '@/app/queryClient'
 import DecisionsPage from './DecisionsPage'
 
-const d = (id: number, outcome: string, reason = 'x'): Decision => ({ id, signal_id: 1, task_id: 10, side: 'BUY', outcome, reason, planned_amount_in: '10000000', planned_min_out: '0', quoted_out: '420', quoted_price_usdg: 23809.5, t_seen: '2026-09-06T08:41:24Z', t_decided: null, t_quoted: null, error: outcome === 'FAILED' ? 'boom' : '', created_at: '2026-09-06T08:41:24Z', tx_id: null, tx_hash: '', filled_in: '0', filled_out: '0', gas_used: 0 })
+const d = (id: number, outcome: string, reason = 'x'): Decision => ({ id, signal_id: 1, task_id: 10, token: '0x3333333333333333333333333333333333333333', side: 'BUY', outcome, reason, planned_amount_in: '10000000', planned_min_out: '0', quoted_out: '420', quoted_price_usdg: 23809.5, t_seen: '2026-09-06T08:41:24Z', t_decided: null, t_quoted: null, error: outcome === 'FAILED' ? 'boom' : '', created_at: '2026-09-06T08:41:24Z', tx_id: null, tx_hash: '', filled_in: '0', filled_out: '0', gas_used: 0 })
 
 function renderPage() {
   return render(

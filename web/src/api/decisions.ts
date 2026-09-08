@@ -5,6 +5,7 @@ export interface Decision {
   id: number
   signal_id: number | null
   task_id: number
+  token: string
   side: 'BUY' | 'SELL'
   outcome: string
   reason: string

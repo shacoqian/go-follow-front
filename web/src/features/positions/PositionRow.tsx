@@ -17,7 +17,7 @@ export function PositionRow({ position: p, onSell }: { position: Position; onSel
 
   // 与 Banner 共用 ['health'] 缓存：判断是否已从 dry-run 切到实盘。
   const health = useQuery({ queryKey: ['health'], queryFn: healthApi.get, refetchInterval: 10_000, meta: { silent: true } })
-  // 决策没有 token 字段，只能按任务近似判断在途，见 exitState.ts 的 positionInFlight 注释。
+  // 按 (task_id, token) 精确匹配最近决策判断在途，见 exitState.ts 的 positionInFlight。
   const decisions = useQuery({
     queryKey: ['decisions', p.task_id, 'recent'],
     queryFn: () => decisionsApi.list({ task: p.task_id, limit: 50 }),
