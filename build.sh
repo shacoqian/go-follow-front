@@ -1,32 +1,23 @@
-#!/bin/bash
+#!/bin/sh
 #
-# 就地部署（在运行目录执行）：拉源码 → npm ci + vite build → go build（内嵌 dist）→ 同步到当前目录。
-#   SRC_DIR   源码 checkout 路径，默认 /home/chain-bridge/go-follow-front
-#   BRANCH    分支，默认 main
-#   SKIP_PULL=1 不拉代码
-# 同步内容：bin/gofollow-front、app.sh、.env.example、web/.env.example。
-# 绝不覆盖：.env（LISTEN/GOFOLLOW_URL）、web/.env（VITE_* 构建期变量在源码目录里读）、logs/。
-set -euo pipefail
+# 就地部署：拉源码 → 构建前端与内嵌二进制 → copy 运行所需文件到当前目录。
+# 运行目录只需要有本脚本。.env 是每机一份的运行参数，不在 git 里，缺失时从示例生成后再改。
+#   SRC_DIR 源码路径，默认 /opt/src/go-follow-front；BRANCH 默认 main；SKIP_PULL=1 跳过 git pull
+#
 WORK_DIR=$(pwd)
-SRC_DIR="${SRC_DIR:-/home/chain-bridge/go-follow-front}"
-BRANCH="${BRANCH:-main}"
+SRC_DIR=${SRC_DIR:-/opt/src/go-follow-front}
+BRANCH=${BRANCH:-main}
+set -e
 
-[ -d "$SRC_DIR/.git" ] || { echo "源码目录不存在或不是 git 仓库: $SRC_DIR（用 SRC_DIR=... 指定）"; exit 1; }
 cd "$SRC_DIR"
-if [ "${SKIP_PULL:-0}" != "1" ]; then
-  git checkout -q "$BRANCH"
-  git pull -q
-fi
-REV=$(git rev-parse --short HEAD)
-echo "构建 $BRANCH@$REV ..."
-# 构建期变量（VITE_EXPLORER_BASE 等）从源码目录的 web/.env 读；没有就用运行目录的 web/.env（若存在）。
-if [ ! -f web/.env ] && [ -f "$WORK_DIR/web/.env" ]; then cp "$WORK_DIR/web/.env" web/.env; fi
+[ "${SKIP_PULL:-0}" = 1 ] || { git checkout "$BRANCH"; git pull; }
 (cd web && npm ci --silent && npm run build --silent)
-go build -tags embeddist -o "$WORK_DIR/bin/gofollow-front.new" ./cmd/gofollow-front
-mkdir -p "$WORK_DIR/bin" "$WORK_DIR/logs"
-mv -f "$WORK_DIR/bin/gofollow-front.new" "$WORK_DIR/bin/gofollow-front"
-cp app.sh "$WORK_DIR/app.sh"; chmod +x "$WORK_DIR/app.sh"
-[ -f .env.example ] && cp .env.example "$WORK_DIR/.env.example"
-mkdir -p "$WORK_DIR/web"; [ -f web/.env.example ] && cp web/.env.example "$WORK_DIR/web/.env.example"
-[ -f "$WORK_DIR/.env" ] || echo "提示：$WORK_DIR/.env 不存在，请从 .env.example 复制并填写 LISTEN / GOFOLLOW_URL"
-echo "构建完成（$REV），运行目录已更新：$WORK_DIR；重启用 ./app.sh restart"
+go build -tags embeddist -o gofollow-front ./cmd/gofollow-front
+
+mkdir -p "$WORK_DIR/bin"
+cp gofollow-front "$WORK_DIR/bin/"
+cp app.sh         "$WORK_DIR/"   # 运维脚本随包同步
+cp .env.example   "$WORK_DIR/"
+[ -f "$WORK_DIR/.env" ] || { cp .env.example "$WORK_DIR/.env"; echo "已生成 .env，请改 LISTEN / GOFOLLOW_URL 后再启动"; }
+
+echo "构建完成（$(git rev-parse --short HEAD)），运行目录已更新：$WORK_DIR；启动 ./app.sh restart"

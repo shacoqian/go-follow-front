@@ -9,7 +9,7 @@ go-follow（Robinhood Chain 链上跟单服务）的 Web 前端：OKX 钱包签�
 
 ## 部署（gofollow 侧配置）
 
-**就地部署脚本 `build.sh`**（在运行目录执行）：`SRC_DIR=<源码路径> [BRANCH=main] [SKIP_PULL=1] ./build.sh` 拉源码、`npm ci` + `vite build`、内嵌编译，把 `bin/gofollow-front`、`app.sh`、`.env.example`、`web/.env.example` 同步到当前目录；不覆盖 `.env` 与 `logs/`。构建期变量（`VITE_EXPLORER_BASE` 等）从源码目录的 `web/.env` 读，没有则复用运行目录的 `web/.env`。
+**就地部署脚本 `build.sh`**（在运行目录执行）：`SRC_DIR=<源码路径> [BRANCH=main] [SKIP_PULL=1] ./build.sh` 拉源码、`npm ci` + `vite build`、内嵌编译，把 `bin/gofollow-front`、`app.sh`、`.env.example` 同步过来；`.env`（`LISTEN`/`GOFOLLOW_URL`）是每机一份的运行参数，不在 git 里，缺失时自动从示例生成，改好再启动。构建期变量（`VITE_EXPLORER_BASE` 等）放源码目录的 `web/.env`。运行目录只需要有 `build.sh` 一个文件。
 
 ```toml
 [api]
