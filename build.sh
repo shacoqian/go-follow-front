@@ -5,7 +5,7 @@
 #   SRC_DIR 源码路径，默认 /opt/src/go-follow-front；BRANCH 默认 main；SKIP_PULL=1 跳过 git pull
 #
 WORK_DIR=$(pwd)
-SRC_DIR=${SRC_DIR:-/opt/src/go-follow-front}
+SRC_DIR=${SRC_DIR:-/home/chain-bridge/go-follow-front}
 BRANCH=${BRANCH:-main}
 set -e
 
