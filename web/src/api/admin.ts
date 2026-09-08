@@ -1,7 +1,7 @@
-import { request } from './client'
+import { request, requestFull, type Reply } from './client'
 import { qs } from './query'
 import type { Task } from './tasks'
-import type { Wallet, Withdrawal } from './wallets'
+import type { Wallet, Withdrawal, WithdrawResult } from './wallets'
 import type { Position } from './positions'
 import type { Decision } from './decisions'
 
@@ -97,7 +97,8 @@ export const adminApi = {
     request<{ ok: boolean; id: number; enabled: boolean }>('POST', `/admin/operators/${id}/${on ? 'enable' : 'disable'}`, undefined),
   deleteOperator: (id: number, force?: boolean) =>
     request<void>('DELETE', `/admin/operators/${id}${force ? '?force=1' : ''}`, undefined),
-  operatorWithdraw: (id: number, amount: string) =>
-    request<{ ok?: boolean }>('POST', `/admin/operators/${id}/withdraw`, { amount }, { timeoutMs: 90_000 }),
+  // 与 walletsApi.withdraw 共用 runWithdraw：200/202（广播结果未知）都要看，故用 requestFull。
+  operatorWithdraw: (id: number, amount: string): Promise<Reply<WithdrawResult>> =>
+    requestFull<WithdrawResult>('POST', `/admin/operators/${id}/withdraw`, { amount }, { timeoutMs: 90_000 }),
   execStatus: () => request<ExecStatus>('GET', '/exec/status', undefined),
 }

@@ -6,7 +6,11 @@ import { adminApi } from './admin'
 import { blacklistApi } from './blacklist'
 
 const req = vi.spyOn(client, 'request')
-beforeEach(() => req.mockReset().mockResolvedValue({}))
+const reqFull = vi.spyOn(client, 'requestFull')
+beforeEach(() => {
+  req.mockReset().mockResolvedValue({})
+  reqFull.mockReset().mockResolvedValue({ status: 200, data: {} })
+})
 
 it('positions / sell', async () => {
   await positionsApi.byTask(3)
@@ -75,8 +79,6 @@ it('admin operator / exec routes', async () => {
   await adminApi.setOperatorEnabled(4, false)
   await adminApi.deleteOperator(4)
   await adminApi.deleteOperator(4, true)
-  await adminApi.operatorWithdraw(4, '1000000000000000000')
-  await adminApi.operatorWithdraw(4, 'all')
   await adminApi.execStatus()
   expect(req.mock.calls.map((c) => c.slice(0, 3))).toEqual([
     ['GET', '/admin/operators', undefined],
@@ -85,10 +87,21 @@ it('admin operator / exec routes', async () => {
     ['POST', '/admin/operators/4/disable', undefined],
     ['DELETE', '/admin/operators/4', undefined],
     ['DELETE', '/admin/operators/4?force=1', undefined],
-    ['POST', '/admin/operators/4/withdraw', { amount: '1000000000000000000' }],
-    ['POST', '/admin/operators/4/withdraw', { amount: 'all' }],
     ['GET', '/exec/status', undefined],
   ])
+})
+
+it('operator withdraw uses requestFull so a 202 (broadcast uncertain) survives', async () => {
+  reqFull.mockResolvedValue({ status: 202, data: { id: 1, tx_hash: '0x', status: 'SENT', note: 'n' } })
+  await adminApi.operatorWithdraw(4, '1000000000000000000')
+  await adminApi.operatorWithdraw(4, 'all')
+  expect(reqFull.mock.calls.map((c) => c.slice(0, 3))).toEqual([
+    ['POST', '/admin/operators/4/withdraw', { amount: '1000000000000000000' }],
+    ['POST', '/admin/operators/4/withdraw', { amount: 'all' }],
+  ])
+  expect(reqFull.mock.calls[0][3]).toEqual({ timeoutMs: 90_000 })
+  const r = await adminApi.operatorWithdraw(4, 'all')
+  expect(r.status).toBe(202)
 })
 
 it('blacklist routes', async () => {

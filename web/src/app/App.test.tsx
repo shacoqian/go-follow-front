@@ -28,6 +28,12 @@ vi.mock('@/api/admin', () => ({
     enableTask: vi.fn(),
     disableTask: vi.fn(),
     audit: vi.fn(),
+    operators: vi.fn(),
+    createOperator: vi.fn(),
+    setOperatorEnabled: vi.fn(),
+    deleteOperator: vi.fn(),
+    operatorWithdraw: vi.fn(),
+    execStatus: vi.fn(),
   },
 }))
 vi.mock('@/wallets/okx', () => ({
@@ -83,6 +89,8 @@ beforeEach(() => {
   vi.mocked(decisionsApi.list).mockResolvedValue([])
   vi.mocked(signalsApi.list).mockResolvedValue([])
   vi.mocked(adminApi.users).mockResolvedValue([])
+  vi.mocked(adminApi.operators).mockResolvedValue([])
+  vi.mocked(adminApi.execStatus).mockResolvedValue({ operators_ready: 0, allowance_cache_entries: 0, daily_spent: [] })
 })
 
 it('redirects an anonymous visitor to the login page', async () => {
@@ -111,6 +119,18 @@ it('shows the admin group for admins and guards admin routes for users', async (
 
   useSession.getState().setSession({ token: 't', address: '0xabc', role: 'user', expiresAt: '' })
   renderAt('/admin/users')
+  expect(await screen.findAllByRole('heading', { name: '钱包' })).not.toHaveLength(0)
+})
+
+it('shows Operator 钱包 for admins and guards /admin/operators for users', async () => {
+  useSession.getState().setSession({ token: 't', address: '0xabc', role: 'admin', expiresAt: '' })
+  const first = renderAt('/admin/operators')
+  expect(await screen.findByRole('heading', { name: 'Operator 钱包' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Operator' })).toHaveAttribute('href', '/admin/operators')
+  first.unmount()
+
+  useSession.getState().setSession({ token: 't', address: '0xabc', role: 'user', expiresAt: '' })
+  renderAt('/admin/operators')
   expect(await screen.findAllByRole('heading', { name: '钱包' })).not.toHaveLength(0)
 })
 

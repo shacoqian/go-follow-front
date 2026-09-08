@@ -14,6 +14,7 @@ import OverviewPage from '@/features/admin/OverviewPage'
 import UsersPage from '@/features/admin/UsersPage'
 import DataPage from '@/features/admin/DataPage'
 import AuditPage from '@/features/admin/AuditPage'
+import OperatorsPage from '@/features/admin/OperatorsPage'
 import { Toaster } from '@/components/ui/toast'
 import RequireAdmin from './RequireAdmin'
 import RequireAuth from './RequireAuth'
@@ -41,6 +42,7 @@ export function AppRoutes() {
             <Route path="/admin/users" element={<UsersPage />} />
             <Route path="/admin/data" element={<DataPage />} />
             <Route path="/admin/audit" element={<AuditPage />} />
+            <Route path="/admin/operators" element={<OperatorsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/wallets" replace />} />
         </Route>

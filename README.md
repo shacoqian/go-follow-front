@@ -5,7 +5,7 @@ go-follow（Robinhood Chain 链上跟单服务）的 Web 前端：OKX 钱包签�
 - 前端：`web/`（React 18 + Vite + TypeScript + Tailwind + TanStack Query + shadcn/ui）
 - 托管：`server/`（Go，`go:embed` 打包 `web/dist`，`/api/*` 反代到 gofollow，其余回 `index.html`）
 - 设计：`docs/superpowers/specs/2026-09-06-frontend-design.md`；需求记录：`docs/2026-09-06-需求讨论记录.md`
-- 对应 go-follow 版本：`00b657a`；接口契约以 go-follow README「接口一览」为准
+- 对应 go-follow 版本：`549afa3`；接口契约以 go-follow README「接口一览」为准
 
 ## 部署（gofollow 侧配置）
 
@@ -60,6 +60,16 @@ npm run build      # 产物在 web/dist
 黑名单按用户一份（不再挂在单个任务上），对该用户名下所有跟单任务生效，只拦买入。导航“黑名单”页里每行填一个代币地址，保存时校验格式并去重规范化为小写；`GET/PUT /api/settings/blacklist` 对应 `{tokens: string[]}`。
 
 依赖 go-follow ≥ `52dd39d`（迁移 5），后端与前端需一起重启。
+
+## 实盘执行
+
+跟随 go-follow 实盘执行（P3）：`dry_run=false` 时决策会真实上链，管理员需要先在「管理 → Operator」页生成、登记、启用签单用的系统钱包（operator）。
+
+- **Operator 钱包页**（`/admin/operators`，仅管理员）：`生成` 创建一把新 operator（私钥加密入库，不接受导入），生成后状态为**未登记**，需要管理员在掌钥机对合约执行 `setOperator(addr, true)` 登记后，页面上的 `启用` 按钮才会成功（未登记时点 `启用` 返回 409，页面行内提示）；已启用的 operator 才会被派单选中签单。`删除`（前置：已停用、无在途交易；仍链上登记时后端 409 提示先去掌钥机撤销登记，可用 `强制删除` 带 `force=1` 确认放行）与 `提回 ETH`（提到管理员登录地址，全部或指定金额）同理走 `POST /admin/operators/:id/{enable,disable}`、`DELETE /admin/operators/:id`、`POST /admin/operators/:id/withdraw`。页面顶部显示 `GET /exec/status` 的可用 operator 数与授权缓存条数，总览页也有「可用 operator」指标卡。
+- **决策列表**新增「成交」（按买卖方向换算 `filled_in`/`filled_out`）、「交易」（`tx_hash` 缩写 + 区块浏览器链接）、「gas」列；结果角标新增 `PENDING`/`SENT`（蓝）状态，`EXECUTED` 改为绿色；`capped`（被单笔上限截断）在结果角标旁额外标一个「已截断」提示，不影响 outcome 本身。
+- **仓位页**：某任务下某代币最近一条决策若为 `PENDING`/`SENT` 且比该仓位的更新时间新，标蓝色「在途」；`dry_run` 从 true 切到 false 后遗留的虚拟仓位（`virtual=true`）标琥珀色「dry-run 遗留」，这类仓位只读展示，手动卖出会被后端拒绝。
+
+依赖 go-follow ≥ `549afa3`（`/decisions` 返回 `token`，仓位页按 `(task_id, token)` 精确匹配判断在途；更早版本的决策行没有这个字段会导致仓位页报错）。
 
 ## 构建与运行
 

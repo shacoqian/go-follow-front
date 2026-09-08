@@ -255,3 +255,20 @@ zod schema 一处定义，同时导出表单类型与提交换算。界面单位
   - “目标”旁新增“来源”筛选（`Select`，选项 全部/本人/代发），选中时把 `via: 'self' | 'relay'` 并入查询参数与 `queryKey`，`全部` 不带该参数。
   - 表格“目标”列在地址后追加来源标签：`self` 灰色 `本人`；`relay` 蓝色 `代发`，鼠标悬停显示 `发送方 {shortAddress(tx_from)}`。
 - 跟单任务表单：`单币加仓次数` 字段允许输入 `0`（表示不限加仓次数上限），标签改为“单币加仓次数（0 = 不限）”，`min` 属性由 `1` 改为 `0`；`strategySchema` 校验从 `.min(1, '至少 1 次')` 改为 `.min(0, '不能为负')`，默认值仍为 `1`。
+
+## 实现修订（2026-09-08，计划 G）
+
+跟随 go-follow 实盘执行 P3（依赖 ≥ `549afa3`）：管理员 operator 钱包页；决策列表显示新状态与成交字段；仓位页在途/dry-run 遗留标签；总览显示可用 operator 数。
+
+- §9 决策：结果角标改为 `EXECUTED`/`DRY_RUN` 绿、`SKIPPED` 灰、`FAILED` 红、`PENDING`/`SENT` 蓝（原文写“其他蓝”已不准确，`EXECUTED` 单独改绿）；表格新增“成交”列（`filled_in`/`filled_out` 未成交时为 `"0"`/`"0"`，显示 `—`；成交后按买卖方向换算：买入“花 x USDG 得 y”、卖出“花 x 得 y USDG”，`y`/`x` 的代币一侧精度未知原样显示整数字符串）、“交易”列（`tx_hash` 缩写 + 区块浏览器链接，无哈希显示 `—`）、“gas”列（`gas_used`，为 0 显示 `—`）；筛选下拉新增 `PENDING`、`SENT` 两项；`reason=capped`（被单笔上限截断的成功买入）在结果角标旁额外加一个琥珀色“已截断”角标，不改变 outcome 本身、不算跳过。
+- §9 仓位：“在途”标签（蓝）——同一 `(task_id, token)`（代币地址大小写不敏感比较）最近一条决策的 `outcome` 为 `PENDING`/`SENT`，且该决策 `created_at`（`Date.parse` 比较）晚于这条仓位的 `updated_at`；通过 `useQuery(['decisions', task_id, 'recent'], () => decisionsApi.list({task: task_id, limit: 50}))`（10 s 轮询）取数，回执落地后引擎重新记账、`updated_at` 推进，标记随之消失。`virtual=true` 且当前 `GET /health` 的 `dry_run=false`（即已从模拟切到实盘）时，原有的灰色“dry-run”角标换成琥珀色“dry-run 遗留”；仍处于 dry-run 模式（或 health 还没取回来）时保留原有灰色“dry-run”角标不变。手动卖出成功返回 `outcome:"SENT"` 时额外显示“已广播，等待回执（tx_id N）”。
+- §10 总览：指标卡新增“可用 operator”（`engine.operators_ready`）。
+- 新增 §6.1 Operator 钱包页（`/admin/operators`，仅管理员，导航“管理”组紧跟在“审计”之后，标签 `Operator`）：
+  - 页面说明“签所有跟单交易、只付 gas；生成后需在掌钥机登记再启用”；顶部显示 `GET /exec/status` 的“可用 operator {n} · 授权缓存 {n}”。
+  - `生成`（`POST /admin/operators`，无需入参）成功后 toast“已生成 {shortAddress(address)}”并刷新列表；新生成的一把状态恒为**未登记**、**已停用**。
+  - 表格列：地址（可复制 + 区块浏览器链接）、ETH 余额（`weiToEth`）、登记（已登记绿 / 未登记琥珀）、状态（已启用蓝 / 已停用灰 / 已摘除：`{removed_reason}` 红——`removed` 与 `enabled` 是后端两个独立字段，摘除优先于启停展示）、在途（`in_flight`）、操作。
+  - 操作按状态（`removed` 优先于 `registered`/`enabled` 判断）：已摘除只有 `启用`（`POST .../enable`，清摘除状态与失败计数，即“恢复”，按钮文案仍是“启用”不单独造词）；未登记只有 `删除`；已登记未启用有 `启用`、`删除`、`提回 ETH`；已启用有 `停用`、`提回 ETH`。
+  - `启用` 在链上未登记时后端返回 409 `尚未在链上登记为 operator`，行内展示（`role="alert"`），不走全局 toast。
+  - `删除` 先弹 `ConfirmDialog`（标题“删除 operator”，说明“删除后私钥无法找回，请确认已提回 ETH 并在掌钥机撤销登记”，确认按钮“确认删除”）→ `DELETE /admin/operators/:id`；409（已启用/仍有在途交易/链上登记状态未知/仍链上登记/钱包仍有余额五种文案之一）时关掉确认框，在该行行内展示错误原文并出现 `强制删除` 按钮，点击后带 `force=true` 直接重试（不再二次确认）。
+  - `提回 ETH` 打开 `OperatorWithdrawDialog`：金额（ETH）输入或勾选“全部”（发 `"all"`）→ `POST /admin/operators/:id/withdraw {amount}`（收款地址恒为管理员登录地址，后端决定、前端不传）；200/202 都要处理（复用 `walletsApi.withdraw` 的 `requestFull` 模式），成功 toast“已提交提回”，展示状态角标（复用 `withdrawStatus.ts` 的 `statusTone`/`statusText`）与哈希（区块浏览器链接或原文+复制按钮）。
+- 类型：`Operator`（`id, address, label, enabled, registered, in_flight, removed, removed_reason, created_at, eth_balance, eth_error?`）、`ExecStatus`（`operators_ready, allowance_cache_entries, daily_spent: {wallet_id, spent_usdg}[], since?`）定义在 `api/admin.ts`；`Decision` 加 `token, tx_id, tx_hash, filled_in, filled_out, gas_used`；`SellResult` 加 `tx_id?`。

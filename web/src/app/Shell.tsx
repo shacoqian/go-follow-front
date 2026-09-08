@@ -22,6 +22,7 @@ const adminNav = [
   { to: '/admin/users', label: '用户' },
   { to: '/admin/data', label: '全站数据' },
   { to: '/admin/audit', label: '审计' },
+  { to: '/admin/operators', label: 'Operator' },
 ]
 
 function Nav({ items }: { items: { to: string; label: string }[] }) {
