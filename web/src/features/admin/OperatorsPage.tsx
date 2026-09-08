@@ -16,15 +16,28 @@ import { OperatorWithdrawDialog } from './OperatorWithdrawDialog'
 
 type Action = 'enable' | 'delete' | 'withdraw' | 'disable'
 
-// 未登记只能删除；已登记未启用可以启用/删除/提回；已启用可以停用/提回；
-// 已摘除（自动摘除，可能仍是 enabled=true）只提供启用（恢复），不提供删除——
-// 见后端 exec.OperatorPool：removed 与 enabled 是两个独立的状态，摘除优先展示。
+// 未登记只能删除；已登记未启用可以启用/删除/提回；已启用可以停用/提回。
+// 已摘除是自动摘除（连续失败），与 enabled 是两个独立的后端状态，摘除时按当前
+// enabled 再分两种：removed&&enabled 只给启用(恢复)/停用；removed&&!enabled
+// 只给启用/删除（未登记时后端删除唯一接受的动作就是删除本身，其余都会 409）。
+// 两种摘除态都不给「提回 ETH」——摘除多半意味着这把还没理清楚状态，先别动钱。
 function operatorActions(op: Operator): Action[] {
-  if (op.removed) return ['enable']
+  if (op.removed) return op.enabled ? ['enable', 'disable'] : ['enable', 'delete']
   if (!op.registered) return ['delete']
   if (!op.enabled) return ['enable', 'delete', 'withdraw']
   return ['disable', 'withdraw']
 }
+
+// DELETE /admin/operators/:id 的 409 里，「请先停用该 operator」「仍有在途交易」在
+// 后端读 force 参数之前就返回（分别对应 st.Enabled / st.InFlight>0 两道闸），带
+// force=1 重试毫无意义；其余四种——链上登记状态未知、请先在掌钥机撤销登记、余额未知、
+// 钱包仍有余额请先提回——都在 !force 分支里，force=1 能绕过，才展示「强制删除」。
+const FORCE_BYPASSABLE_DELETE_ERRORS = new Set([
+  '链上登记状态未知，请稍后重试或带 force=1',
+  '请先在掌钥机撤销登记',
+  '余额未知',
+  '钱包仍有余额，请先提回',
+])
 
 export default function OperatorsPage() {
   const { data: operators, isLoading, isError } = useOperators()
@@ -32,8 +45,8 @@ export default function OperatorsPage() {
   const qc = useQueryClient()
 
   const [deleteTarget, setDeleteTarget] = useState<Operator | null>(null)
-  const [deleteError, setDeleteError] = useState<{ id: number; message: string } | null>(null)
-  const [enableError, setEnableError] = useState<{ id: number; message: string } | null>(null)
+  const [deleteErrors, setDeleteErrors] = useState<Record<number, string>>({})
+  const [enableErrors, setEnableErrors] = useState<Record<number, string>>({})
   const [withdrawTarget, setWithdrawTarget] = useState<Operator | null>(null)
 
   function invalidate() {
@@ -51,35 +64,36 @@ export default function OperatorsPage() {
   })
 
   // 启用未登记时后端 409，行内展示，故 meta.silent；其余异常手动 toast。
+  // 成功后清空全部行内错误：列表已刷新，残留在别的行上的旧错误不再可信，别让它一直挂着。
   const setEnabled = useMutation({
     mutationFn: (vars: { id: number; on: boolean }) => adminApi.setOperatorEnabled(vars.id, vars.on),
     meta: { silent: true },
-    onSuccess: (_res, vars) => {
+    onSuccess: () => {
       invalidate()
-      setEnableError((e) => (e?.id === vars.id ? null : e))
+      setEnableErrors({})
     },
     onError: (err, vars) => {
       if (err instanceof ApiError) {
-        setEnableError({ id: vars.id, message: err.message })
+        setEnableErrors((e) => ({ ...e, [vars.id]: err.message }))
       } else {
         toast.error(err instanceof Error ? err.message : '操作失败')
       }
     },
   })
 
-  // 删除 409 内联展示 + 强制删除按钮，故 meta.silent；其余异常手动 toast。
+  // 删除 409 内联展示 + （视错误原因）强制删除按钮，故 meta.silent；其余异常手动 toast。
   const deleteOp = useMutation({
     mutationFn: (vars: { id: number; force: boolean }) => adminApi.deleteOperator(vars.id, vars.force),
     meta: { silent: true },
-    onSuccess: (_res, vars) => {
+    onSuccess: () => {
       invalidate()
       toast.success('已删除')
       setDeleteTarget(null)
-      setDeleteError((e) => (e?.id === vars.id ? null : e))
+      setDeleteErrors({})
     },
     onError: (err, vars) => {
       if (err instanceof ApiError) {
-        setDeleteError({ id: vars.id, message: err.message })
+        setDeleteErrors((e) => ({ ...e, [vars.id]: err.message }))
         setDeleteTarget(null)
       } else {
         toast.error(err instanceof Error ? err.message : '操作失败')
@@ -113,6 +127,10 @@ export default function OperatorsPage() {
             {(operators ?? []).map((op) => {
               const url = addressUrl(op.address)
               const actions = operatorActions(op)
+              const enablePending = setEnabled.isPending && setEnabled.variables?.id === op.id
+              const deletePending = deleteOp.isPending && deleteOp.variables?.id === op.id
+              const deleteError = deleteErrors[op.id]
+              const canForceDelete = deleteError !== undefined && FORCE_BYPASSABLE_DELETE_ERRORS.has(deleteError)
               return (
                 <Tr key={op.id}>
                   <Td>
@@ -143,7 +161,7 @@ export default function OperatorsPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          disabled={setEnabled.isPending}
+                          disabled={enablePending}
                           onClick={() => setEnabled.mutate({ id: op.id, on: true })}
                         >
                           启用
@@ -153,7 +171,7 @@ export default function OperatorsPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          disabled={setEnabled.isPending}
+                          disabled={enablePending}
                           onClick={() => setEnabled.mutate({ id: op.id, on: false })}
                         >
                           停用
@@ -170,7 +188,11 @@ export default function OperatorsPage() {
                           variant="ghost"
                           className="text-red-600"
                           onClick={() => {
-                            setDeleteError((e) => (e?.id === op.id ? null : e))
+                            setDeleteErrors((e) => {
+                              if (!(op.id in e)) return e
+                              const { [op.id]: _drop, ...rest } = e
+                              return rest
+                            })
                             setDeleteTarget(op)
                           }}
                         >
@@ -178,22 +200,24 @@ export default function OperatorsPage() {
                         </Button>
                       )}
                     </div>
-                    {enableError?.id === op.id && (
+                    {enableErrors[op.id] && (
                       <p role="alert" className="mt-1 text-xs text-red-600">
-                        {enableError.message}
+                        {enableErrors[op.id]}
                       </p>
                     )}
-                    {deleteError?.id === op.id && (
+                    {deleteError && (
                       <div role="alert" className="mt-1 space-y-1 text-xs text-red-600">
-                        <p>{deleteError.message}</p>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={deleteOp.isPending}
-                          onClick={() => deleteOp.mutate({ id: op.id, force: true })}
-                        >
-                          强制删除
-                        </Button>
+                        <p>{deleteError}</p>
+                        {canForceDelete && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={deletePending}
+                            onClick={() => deleteOp.mutate({ id: op.id, force: true })}
+                          >
+                            强制删除
+                          </Button>
+                        )}
                       </div>
                     )}
                   </Td>
@@ -212,7 +236,7 @@ export default function OperatorsPage() {
           description="删除后私钥无法找回，请确认已提回 ETH 并在掌钥机撤销登记"
           confirmText="确认删除"
           destructive
-          busy={deleteOp.isPending}
+          busy={deleteOp.isPending && deleteOp.variables?.id === deleteTarget.id}
           onConfirm={() => deleteOp.mutate({ id: deleteTarget.id, force: false })}
         />
       )}

@@ -59,6 +59,14 @@ it('marks a position in flight only for a newer PENDING/SENT decision on the sam
   )
 })
 
+it('degrades instead of throwing when an older backend omits decision.token', () => {
+  const decisionMissingToken = dec(1, '0xaaa', 'SENT', '2026-09-07T00:00:00Z')
+  // @ts-expect-error 模拟旧版 go-follow 的响应里没有 token 字段
+  delete decisionMissingToken.token
+  expect(() => positionInFlight(pos(1, '0xAAA', '2026-09-06T00:00:00Z'), [decisionMissingToken])).not.toThrow()
+  expect(positionInFlight(pos(1, '0xAAA', '2026-09-06T00:00:00Z'), [decisionMissingToken])).toBe(false)
+})
+
 it('flags a virtual position as dry-run leftover only once the mode is confirmed live', () => {
   expect(dryRunLeftover({ virtual: true }, true)).toBe(false)
   expect(dryRunLeftover({ virtual: true }, false)).toBe(true)

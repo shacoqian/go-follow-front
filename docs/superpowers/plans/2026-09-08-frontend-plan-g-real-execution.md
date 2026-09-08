@@ -37,7 +37,7 @@
 - Create: `web/src/features/admin/OperatorsPage.tsx`、`web/src/features/admin/OperatorsPage.test.tsx`、`web/src/features/admin/OperatorWithdrawDialog.tsx`
 - Modify: `web/src/app/App.tsx`（`/admin/operators` 在 `RequireAdmin` 下）、`web/src/app/Shell.tsx`（`adminNav` 加 `{ to: '/admin/operators', label: 'Operator' }`）、`web/src/app/App.test.tsx`、`README.md`、`docs/superpowers/specs/2026-09-06-frontend-design.md`（实现修订 计划 G）
 
-**页面**：说明文案；`生成` 按钮 → 成功后 toast `已生成 {shortAddress}`，列表刷新；表格列 地址(可复制 + `addressUrl` 链接)/ETH 余额(`weiToEth`)/登记/状态/在途/操作；操作按状态：未登记只有 `删除`；已登记未启用 `启用`、`删除`、`提回 ETH`；已启用 `停用`、`提回 ETH`；已摘除显示原因 + `启用`（恢复）。`删除` 走 `ConfirmDialog`，409 时把后端文案行内显示，并出现 `强制删除` 按钮（`force=1`）。`提回 ETH` 对话框：金额或全部 → `operatorWithdraw`，成功 toast `已提交提回`。页面顶部显示 `GET /exec/status` 的 `可用 operator {n}`、`授权缓存 {n}`。
+**页面**：说明文案；`生成` 按钮 → 成功后 toast `已生成 {shortAddress}`，列表刷新；表格列 地址(可复制 + `addressUrl` 链接)/ETH 余额(`weiToEth`)/登记/状态/在途/操作；操作按状态：未登记只有 `删除`；已登记未启用 `启用`、`删除`、`提回 ETH`；已启用 `停用`、`提回 ETH`；已摘除（`removed`，与 `enabled` 是后端两个独立字段，可能同时为真）显示原因，且 `removed && enabled` 只给 `启用`（恢复）+ `停用`，`removed && !enabled` 只给 `启用` + `删除`——两种摘除态都不给 `提回 ETH`。`删除` 走 `ConfirmDialog`，409 时把后端文案行内显示；`DELETE /admin/operators/:id` 共六种 409 文案，`请先停用该 operator`、`仍有在途交易` 在后端读 `force` 参数之前就返回，只显示文案、不出现 `强制删除`；`链上登记状态未知，请稍后重试或带 force=1`、`请先在掌钥机撤销登记`、`余额未知`、`钱包仍有余额，请先提回` 这四种都在 `!force` 分支里，才出现 `强制删除` 按钮（点击带 `force=1` 重试）。`提回 ETH` 对话框：金额或全部 → `operatorWithdraw`，成功 toast `已提交提回`。页面顶部显示 `GET /exec/status` 的 `可用 operator {n}`、`授权缓存 {n}`。
 
 - [ ] **Step 1: 写失败测试** — 列表渲染四种状态；生成调 `createOperator` 并 toast；启用 409 行内显示 `尚未在链上登记为 operator`；删除 409 显示文案且出现 `强制删除`，点后以 `force=true` 调用；提回全部以 `'all'` 调用；非管理员访问 `/admin/operators` 被 `RequireAdmin` 挡（App 测试）。
 - [ ] **Step 2–4** 同上（最后 `npm run build`）

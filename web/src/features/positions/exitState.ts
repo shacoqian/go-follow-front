@@ -12,7 +12,9 @@ export function exitBlockedText(p: Position): string | null {
 
 // 仓位标"在途"：该任务下同一代币（大小写不敏感，链上地址不保证大小写一致）最近一条
 // PENDING/SENT 决策，比这条仓位的 updated_at 更新——回执落地前 updated_at 不会推进，
-// 落地后引擎会重新记账并推进 updated_at，标记随之消失。
+// 落地后引擎会重新记账并推进 updated_at，标记随之消失。dec.token 在类型上是必填字符串
+// （go-follow >= 549afa3 才会返回），但对着更早的后端跑时运行时可能拿到 undefined——
+// 用 ?? '' 兜底，让它退化成"匹配不到、不标在途"而不是抛异常。
 export function positionInFlight(
   p: Pick<Position, 'task_id' | 'token' | 'updated_at'>,
   decisions: Pick<Decision, 'task_id' | 'token' | 'outcome' | 'created_at'>[],
@@ -21,7 +23,7 @@ export function positionInFlight(
   let latest: number | null = null
   for (const dec of decisions) {
     if (dec.outcome !== 'PENDING' && dec.outcome !== 'SENT') continue
-    if (dec.task_id !== p.task_id || dec.token.toLowerCase() !== token) continue
+    if (dec.task_id !== p.task_id || (dec.token ?? '').toLowerCase() !== token) continue
     const t = Date.parse(dec.created_at)
     if (latest === null || t > latest) latest = t
   }
