@@ -60,7 +60,8 @@ stop_app() {
   echo "已停止 pid=$p"
 }
 
-case "${1:-}" in
+# 不带参数即 restart：部署后最常用的动作，省一次敲键。
+case "${1:-restart}" in
   build) make build ;;
   start) start_app ;;
   stop) stop_app ;;
@@ -69,5 +70,5 @@ case "${1:-}" in
     p="$(read_pid)"
     if alive "$p"; then echo "运行中 pid=$p"; else echo "未运行"; fi
     ;;
-  *) echo "用法: $0 build|start|stop|restart|status"; exit 1 ;;
+  *) echo "用法: $0 [build|start|stop|restart|status]（不带参数=restart）"; exit 1 ;;
 esac
