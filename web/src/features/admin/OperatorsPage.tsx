@@ -133,13 +133,16 @@ export default function OperatorsPage() {
               const canForceDelete = deleteError !== undefined && FORCE_BYPASSABLE_DELETE_ERRORS.has(deleteError)
               return (
                 <Tr key={op.id}>
+                  {/* 这一列刻意显示完整地址而不是缩写：登记 operator 要把地址原样敲进掌钥机的
+                      命令行（./app.sh operator <chain> <地址> true），缩写就得依赖复制按钮，
+                      而复制在纯 HTTP 下曾经整个失效。全量文本 + 可选中是最后的兜底。 */}
                   <Td>
                     {url ? (
-                      <a className="font-mono underline" href={url} target="_blank" rel="noreferrer">
-                        {shortAddress(op.address)}
+                      <a className="font-mono text-xs break-all underline" href={url} target="_blank" rel="noreferrer">
+                        {op.address}
                       </a>
                     ) : (
-                      <span className="font-mono">{shortAddress(op.address)}</span>
+                      <span className="font-mono text-xs break-all select-all">{op.address}</span>
                     )}{' '}
                     <CopyButton text={op.address} />
                   </Td>
