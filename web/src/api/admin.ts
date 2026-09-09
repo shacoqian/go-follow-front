@@ -108,6 +108,9 @@ export const adminApi = {
   setSetting: (key: 'kill_switch' | 'dry_run', on: boolean) => request<void>('PUT', `/settings/${key}`, { on }),
   operators: () => request<Operator[]>('GET', '/admin/operators', undefined),
   createOperator: () => request<{ id: number; address: string }>('POST', '/admin/operators', undefined),
+  // 兜底刷新：走后端完整 Reload，重读全池的链上登记状态。日常用不到——打开本页时后端
+  // 已自动重读「未登记」的那些；这个按钮管的是罕见运维，比如掌钥机撤销了某把的登记。
+  refreshOperators: () => request<{ total: number; ready: number }>('POST', '/admin/operators/refresh', undefined),
   setOperatorEnabled: (id: number, on: boolean) =>
     request<{ ok: boolean; id: number; enabled: boolean }>('POST', `/admin/operators/${id}/${on ? 'enable' : 'disable'}`, undefined),
   deleteOperator: (id: number, force?: boolean) =>

@@ -63,6 +63,14 @@ export default function OperatorsPage() {
     },
   })
 
+  const refreshOps = useMutation({
+    mutationFn: () => adminApi.refreshOperators(),
+    onSuccess: (res) => {
+      invalidate()
+      toast.success(`已刷新：共 ${res.total} 把，可用 ${res.ready} 把`)
+    },
+  })
+
   // 启用未登记时后端 409，行内展示，故 meta.silent；其余异常手动 toast。
   // 成功后清空全部行内错误：列表已刷新，残留在别的行上的旧错误不再可信，别让它一直挂着。
   const setEnabled = useMutation({
@@ -111,9 +119,15 @@ export default function OperatorsPage() {
         </p>
       )}
 
-      <div className="mt-4">
+      <div className="mt-4 flex gap-2">
         <Button onClick={() => createOp.mutate()} disabled={createOp.isPending}>
           生成
+        </Button>
+        {/* 日常用不到：打开本页时后端已自动重读「未登记」的那些登记状态。
+            留这个按钮是为了罕见运维——比如掌钥机撤销了某把的登记，那种情况自动刷新不覆盖
+            （已登记的不会被重查，否则每次开页面都要对全池发一轮 eth_call）。 */}
+        <Button variant="ghost" onClick={() => refreshOps.mutate()} disabled={refreshOps.isPending}>
+          {refreshOps.isPending ? '刷新中…' : '刷新登记状态'}
         </Button>
       </div>
 
