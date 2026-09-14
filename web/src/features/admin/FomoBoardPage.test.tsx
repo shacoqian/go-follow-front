@@ -7,7 +7,7 @@ vi.mock('@/api/admin', () => ({ adminApi: { traderScan: vi.fn() } }))
 
 import { adminApi, type FomoBoard, type FomoCandidate, type FomoRun } from '@/api/admin'
 import { makeQueryClient } from '@/app/queryClient'
-import FomoBoardPage, { PRESET } from './FomoBoardPage'
+import FomoBoardPage, { COLS, PRESET } from './FomoBoardPage'
 
 const run: FomoRun = {
   id: 3, started_at: '', finished_at: null, status: 'partial',
@@ -110,4 +110,27 @@ it('覆盖边界声明可展开（spec §4 的硬要求）', async () => {
   await screen.findByText(/status = partial/)
   await userEvent.click(screen.getByText(/这份榜覆盖什么/))
   expect(screen.getByText(/只覆盖「EIP-7702 委托账户/)).toBeInTheDocument()
+})
+
+it('表头带悬停提示，且列说明可展开', async () => {
+  vi.mocked(adminApi.traderScan).mockResolvedValue(board())
+  mount()
+  await screen.findByText(/status = partial/)
+  // 悬停提示：roi_closed 这一列必须说清它是「跟单最该看的」
+  expect(screen.getByTitle(/跟单最该看的一列/)).toBeInTheDocument()
+  // closed 的提示要点出「小 = ROI 是浮盈撑的」——那是最容易踩的坑
+  expect(screen.getByTitle(/小 = ROI 是浮盈撑的/)).toBeInTheDocument()
+  await userEvent.click(screen.getByText('这些列是什么意思'))
+  expect(screen.getByText(/不是 0，是「算不出来」/)).toBeInTheDocument()
+  expect(screen.getByText(/一眼判断能不能信/)).toBeInTheDocument()
+})
+
+it('COLS 覆盖表格实际渲染的每一列（改了列必须同步改说明）', async () => {
+  vi.mocked(adminApi.traderScan).mockResolvedValue(board())
+  const { container } = mount()
+  await screen.findByText(/status = partial/)
+  // 钉住「表头数量 == COLS 数量」：加了列却忘了写说明，这里会红
+  const ths = container.querySelectorAll('thead th')
+  expect(ths.length).toBe(COLS.length)
+  for (const c of COLS) expect(screen.getByTitle(c.tip)).toBeInTheDocument()
 })

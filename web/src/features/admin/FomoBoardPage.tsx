@@ -22,6 +22,56 @@ const BLOCK_SECONDS = 0.103
 // 按比例算比榜上「赚 7,570 而 ROI 0.98」的强一倍。
 export const PRESET = { min_closed_share: 0.5, max_orphan_share: 0.3, min_usdg_leg_share: 0.8 }
 
+
+/**
+ * COLS 是表头的单一来源：列名 + 悬停提示 + 图例长解释。
+ *
+ * 为什么把三者放一处：它们必须一致。分开写的话，改了口径只改一处、
+ * 另两处就开始骗人——而这些数字是用来决定跟谁的。
+ */
+export const COLS: { key: string; tip: string; long: string }[] = [
+  { key: '#', tip: '本页序号（受 offset 影响）', long: '本页序号，翻页后会接着数。' },
+  { key: '地址', tip: '候选钱包，点开链到区块浏览器', long: '候选钱包。点地址链到区块浏览器，旁边按钮一键复制。' },
+  {
+    key: 'roi_closed',
+    tip: '收益率 = 已实现盈亏 ÷ 已结转成本。跟单最该看的一列',
+    long: '收益率 = 已实现盈亏 ÷ 已结转成本。2.34 表示已平掉的那部分赚了 2.34 倍。跟单下单用的是你自己的本金（固定 5 USDG 或按比例），所以能被复制的是**比例**而不是金额 —— 这是最重要的一列。',
+  },
+  {
+    key: 'realized',
+    tip: '已实现盈亏（USDG），可负。绝对额高往往只说明他本金大',
+    long: '已实现盈亏（USDG），可为负。看规模用。绝对额高往往只说明他本金大 —— 榜上有地址赚 7,570 但 ROI 只有 0.98，跟他的收益率不到 ROI 榜首的七分之一。',
+  },
+  { key: '买/卖', tip: '窗口内买入笔数 / 卖出笔数', long: '窗口内的买入与卖出笔数。两者差太多说明窗口截断了他的交易（配合 orphan 一起看）。' },
+  { key: '币', tip: '涉及的代币种数', long: '涉及的代币种数。少 = 专注；几十种 = 广撒网型。' },
+  {
+    key: 'hold_min',
+    tip: '最短持仓 —— 所有买入批次里最快被卖掉的那一批',
+    long: '**最短**持仓时长：所有买入批次里最快被卖掉的那一批。用最短而不是中位，因为中位 7 分钟但有几笔 80 秒就跑的，那几笔你跟进去照样接盘。「每次买入持仓 >5 分钟」这个要求卡的就是这一列。',
+  },
+  { key: 'hold_p50', tip: '持仓时长中位数', long: '持仓时长的中位数，看他整体节奏。' },
+  {
+    key: 'rev_min',
+    tip: '同币相邻反向交易的最小间隔（秒）。几秒 = 做市/刷量',
+    long: '同一个币上相邻反向交易的最小时间间隔。几秒内反复买卖同一个币 = 做市或刷量，不是能跟的策略。',
+  },
+  {
+    key: 'orphan',
+    tip: '卖出所得里配不上买入的比例（按金额）。大 = 这行收益算不准',
+    long: '**数据可信度**。卖出所得里配不上买入的比例（按金额算）。大 = 他卖的是窗口之前就持有的存货，这一行的收益数字算不准。建议 < 0.3。',
+  },
+  {
+    key: 'closed',
+    tip: '已平仓比例 = 已结转成本 ÷ 总买入成本。小 = ROI 是浮盈撑的',
+    long: '**数据可信度**。已平仓比例 = 已结转成本 ÷ 总买入成本。小 = 大头还没卖，roi_closed 只是从一小撮已平仓位算出来的。榜上有 ROI 7.02 的地址 closed 只有 0.07 —— 那 7 倍是平掉 7% 仓位算出来的，剩下 93% 本金是赚是亏完全未知。建议 ≥ 0.5。',
+  },
+  {
+    key: 'USDG腿',
+    tip: 'USDG 原生计价的腿占比。小 = 有腿靠汇率折算，精度低',
+    long: '用 USDG 原生计价的腿占比。小 = 有腿是按 ETH 汇率折算的，金额精度低。建议 ≥ 0.8。',
+  },
+]
+
 type Form = {
   run: string
   sort: '' | 'realized'
@@ -155,6 +205,7 @@ export default function FomoBoardPage() {
   const [applied, setApplied] = useState<Form>(EMPTY)
   const [offset, setOffset] = useState(0)
   const [showLimits, setShowLimits] = useState(false)
+  const [showCols, setShowCols] = useState(false)
   const limit = numOr(applied.limit) ?? 50
   const { data, isLoading, isError, error } = useTraderScan(toQuery(applied, offset))
 
@@ -235,6 +286,38 @@ export default function FomoBoardPage() {
         </Button>
       </div>
 
+      {/* 列含义图例。不放在页面底部而放在表格之前：看不懂列名的人第一眼就该找得到，
+          而底部要滚很久。默认折叠，不挤占看榜的空间。 */}
+      <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+        <button className="text-sky-700 hover:underline" onClick={() => setShowCols((v) => !v)}>
+          {showCols ? '收起列说明' : '这些列是什么意思'}
+        </button>
+        {showCols ? (
+          <dl className="mt-2 space-y-2 text-slate-600">
+            {COLS.slice(2).map((c) => (
+              <div key={c.key} className="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
+                <dt className="shrink-0 font-mono text-xs font-semibold text-slate-900 sm:w-28">{c.key}</dt>
+                <dd className="text-xs leading-relaxed">{c.long}</dd>
+              </div>
+            ))}
+            <div className="flex flex-col gap-0.5 pt-1 sm:flex-row sm:gap-3">
+              <dt className="shrink-0 font-mono text-xs font-semibold text-slate-900 sm:w-28">—</dt>
+              <dd className="text-xs leading-relaxed">
+                <b>不是 0，是「算不出来」</b>。比如 rev_min 为「—」表示这个币上没出现过反向交易；
+                roi_closed 为「—」表示他还没平过仓（分母为 0）。
+              </dd>
+            </div>
+            <div className="flex flex-col gap-0.5 pt-1 sm:flex-row sm:gap-3">
+              <dt className="shrink-0 text-xs font-semibold text-slate-900 sm:w-28">一眼判断能不能信</dt>
+              <dd className="text-xs leading-relaxed">
+                看三个：<b>orphan &lt; 0.3</b>、<b>closed ≥ 0.5</b>、<b>USDG腿 ≥ 0.8</b>。
+                三个都满足，roi_closed 才是可信的数 —— 「常用组合」按钮一次填好这三项。
+              </dd>
+            </div>
+          </dl>
+        ) : null}
+      </div>
+
       {isError ? (
         <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
           {error instanceof Error ? error.message : '加载失败'}
@@ -249,20 +332,11 @@ export default function FomoBoardPage() {
       ) : null}
 
       <Table
-        head={[
-          '#',
-          '地址',
-          'roi_closed',
-          'realized',
-          '买/卖',
-          '币',
-          'hold_min',
-          'hold_p50',
-          'rev_min',
-          'orphan',
-          'closed',
-          'USDG腿',
-        ]}
+        head={COLS.map((c) => (
+          <span key={c.key} title={c.tip} className="cursor-help border-b border-dotted border-slate-400">
+            {c.key}
+          </span>
+        ))}
         empty={isLoading ? '加载中…' : '这些条件下没有候选'}
       >
         {(data?.candidates ?? []).map((c, i) => (
