@@ -19,6 +19,7 @@ const userNav = [
 ]
 const adminNav = [
   { to: '/admin/overview', label: '总览' },
+  { to: '/admin/fomo', label: 'FOMO榜' },
   { to: '/admin/users', label: '用户' },
   { to: '/admin/data', label: '全站数据' },
   { to: '/admin/audit', label: '审计' },

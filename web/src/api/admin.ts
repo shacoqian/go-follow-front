@@ -82,6 +82,77 @@ export interface LogSearchResult {
   entries: LogEntry[]
 }
 
+
+/** FomoRun 是一次 trader-scan 跑批的溯源行。字段与 go-follow 的 store.TraderScanRun 一一对应。 */
+export interface FomoRun {
+  id: number
+  started_at: string
+  finished_at: string | null
+  status: string
+  error: string
+  from_block: number
+  to_block: number
+  node: string
+  git_rev: string
+  edges: string
+  min_txs: number
+  top_cap: number
+  addrs_seen: number
+  addrs_delegated: number
+  addrs_analyzed: number
+  skipped_too_many: number
+}
+
+/**
+ * FomoCandidate 是榜上一行。
+ *
+ * 注意两组字段的「无法计算」表示不同（go-follow spec §2 的硬约定）：
+ *  - 四个份额（usdg_leg_share 等）与 hold_min_sec、hold_p50_sec、reversal_min_sec 用 **-1**（值域非负，-1 在域外）
+ *  - roi_closed / roi_gross 用 **null**（ROI 值域是 [-1,+∞)，-1 是合法值＝亏光）
+ * 渲染时两者都要显示成「—」，绝不能显示成 -1 或 0。
+ */
+export interface FomoCandidate {
+  address: string
+  txs: number
+  signals: number
+  buys: number
+  sells: number
+  tokens: number
+  bought_usdg: string
+  sold_usdg: string
+  realized_usdg: string
+  cost_out_usdg: string
+  open_cost_usdg: string
+  realized_usdg_f: number
+  roi_closed: number | null
+  roi_gross: number | null
+  hold_min_sec: number
+  hold_p50_sec: number
+  reversal_min_sec: number
+  usdg_leg_share: number
+  skipped_leg_share: number
+  orphan_share: number
+  closed_share: number
+}
+
+export interface FomoBoard {
+  run: FomoRun | null
+  candidates: FomoCandidate[]
+  limits: string[]
+}
+
+/** FomoQuery 是榜单的查询条件。刻意没有 min_realized —— 见 traderScan 的注释。 */
+export interface FomoQuery {
+  run?: number
+  sort?: 'roi_closed' | 'realized'
+  min_hold_sec?: number
+  min_closed_share?: number
+  max_orphan_share?: number
+  min_usdg_leg_share?: number
+  limit: number
+  offset: number
+}
+
 export const adminApi = {
   overview: () => request<Overview>('GET', '/admin/overview', undefined),
   users: () => request<AdminUser[]>('GET', '/admin/users', undefined),
@@ -106,6 +177,32 @@ export const adminApi = {
       undefined,
     ),
   setSetting: (key: 'kill_switch' | 'dry_run', on: boolean) => request<void>('PUT', `/settings/${key}`, { on }),
+  /**
+   * traderScan 取候选跟单目标榜（FOMO 榜）。
+   *
+   * 后端该路由**无鉴权**（go-follow 侧按运维者要求去掉），但本仓库仍把页面放在
+   * RequireAuth 内、并照常走 /api 反代 —— 与其它页面一致，不为它开特例。
+   *
+   * 刻意**不暴露 min_realized**：它会筛掉小本金高 ROI 的地址，而跟单下单用的是
+   * 跟单者自己的本金（size_mode fixed/ratio，与目标仓位无关），那些人的成交规模
+   * 与跟单者相当、恰恰最该跟。实测有地址赚 32.89 USDG 但 ROI 1.90、仓位平掉 94%、
+   * 持仓 854 秒，比榜上「赚 7,570 而 ROI 0.98」的强一倍。
+   */
+  traderScan: (p: FomoQuery) =>
+    request<FomoBoard>(
+      'GET',
+      `/admin/trader-scan${qs({
+        run: p.run,
+        sort: p.sort,
+        min_hold_sec: p.min_hold_sec,
+        min_closed_share: p.min_closed_share,
+        max_orphan_share: p.max_orphan_share,
+        min_usdg_leg_share: p.min_usdg_leg_share,
+        limit: p.limit,
+        offset: p.offset || undefined,
+      })}`,
+      undefined,
+    ),
   operators: () => request<Operator[]>('GET', '/admin/operators', undefined),
   createOperator: () => request<{ id: number; address: string }>('POST', '/admin/operators', undefined),
   // 兜底刷新：走后端完整 Reload，重读全池的链上登记状态。日常用不到——打开本页时后端

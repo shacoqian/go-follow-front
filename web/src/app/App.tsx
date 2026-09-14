@@ -18,6 +18,7 @@ import LogsPage from '@/features/admin/LogsPage'
 import OperatorsPage from '@/features/admin/OperatorsPage'
 import { Toaster } from '@/components/ui/toast'
 import RequireAdmin from './RequireAdmin'
+import FomoBoardPage from '@/features/admin/FomoBoardPage'
 import RequireAuth from './RequireAuth'
 import Shell from './Shell'
 import { queryClient } from './queryClient'
@@ -45,6 +46,7 @@ export function AppRoutes() {
             <Route path="/admin/audit" element={<AuditPage />} />
             <Route path="/admin/logs" element={<LogsPage />} />
             <Route path="/admin/operators" element={<OperatorsPage />} />
+            <Route path="/admin/fomo" element={<FomoBoardPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/wallets" replace />} />
         </Route>
