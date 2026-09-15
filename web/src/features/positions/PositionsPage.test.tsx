@@ -6,7 +6,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 vi.mock('@/api/tasks', () => ({ tasksApi: { list: vi.fn() } }))
 vi.mock('@/api/targets', () => ({ targetsApi: { list: vi.fn() } }))
 vi.mock('@/api/wallets', () => ({ walletsApi: { list: vi.fn() } }))
-vi.mock('@/api/positions', () => ({ positionsApi: { all: vi.fn(), byTask: vi.fn(), sell: vi.fn() } }))
+vi.mock('@/api/positions', () => ({ positionsApi: { all: vi.fn(), byTask: vi.fn(), sell: vi.fn(), abandon: vi.fn() } }))
 vi.mock('@/api/decisions', () => ({ decisionsApi: { list: vi.fn() } }))
 vi.mock('@/api/health', () => ({ healthApi: { get: vi.fn() } }))
 
@@ -30,6 +30,10 @@ const pos: Position = {
   addon_count: 1,
   tp_done: false,
   realized_usdg: '0',
+  invested_usdg: '10000000',
+  abandoned: false,
+  symbol: 'FAKE',
+  value_usdg: '7000000',
   virtual: true,
   updated_at: '2026-09-06T00:00:00Z',
   exit_fail_count: 2,
@@ -46,6 +50,10 @@ const closedPos: Position = {
   qty: '0',
   cost_usdg: '0',
   realized_usdg: '1396100',
+  invested_usdg: '5000000',
+  abandoned: false,
+  symbol: 'FYBER',
+  value_usdg: null,
   virtual: false,
   exit_fail_count: 0,
   last_exit_error: '',
@@ -113,7 +121,10 @@ it('splits 进行中 / 已结束 by qty and defaults to 进行中', async () => 
 
   await userEvent.click(screen.getByRole('button', { name: '已结束 (1)' }))
   const done = (await screen.findByText('0x5555…5555')).closest('tr')!
-  expect(within(done).getByText('1.3961')).toBeInTheDocument() // 已实现盈亏必须看得到
+  // 已结束的行靠 invested 才算得出百分比：投入 5.00、已实现 +1.3961 → +27.9%。
+  // 清仓后 cost_usdg 已归零，用它做分母只会得到 0%。
+  expect(within(done).getByText('+27.9%')).toBeInTheDocument()
+  expect(within(done).getByText('FYBER')).toBeInTheDocument() // 代币 symbol
   expect(screen.queryByText('0x3333…3333')).not.toBeInTheDocument()
 })
 
@@ -197,4 +208,47 @@ it('shows a dry-run 遗留 badge for a virtual position once the engine is confi
   const row = (await screen.findByText('0x3333…3333')).closest('tr')!
   expect(await within(row).findByText('dry-run 遗留')).toBeInTheDocument()
   expect(within(row).queryByText('dry-run')).not.toBeInTheDocument()
+})
+
+// 「关闭」只给**卖不掉**的活仓位：能估出价就该走卖出，不能用核销把还能换钱的仓位一笔勾销。
+it('offers 关闭 only for a live position that cannot be valued', async () => {
+  // pos 能估出价（value_usdg=7000000）→ 不给关闭
+  renderPage()
+  const row = (await screen.findByText('0x3333…3333')).closest('tr')!
+  expect(within(row).getByRole('button', { name: '卖出' })).toBeEnabled()
+  expect(within(row).queryByRole('button', { name: '关闭' })).not.toBeInTheDocument()
+})
+
+it('abandons an unsellable position after confirming, and says the tokens stay put', async () => {
+  const stuck: Position = { ...pos, id: 9, task_id: 10, token: '0x6666666666666666666666666666666666666666',
+    symbol: 'STUCK', qty: '23951', cost_usdg: '5000000', value_usdg: null, virtual: false }
+  vi.mocked(positionsApi.all).mockResolvedValue([stuck])
+  vi.mocked(positionsApi.abandon).mockResolvedValue({ ok: true })
+  renderPage()
+  const row = (await screen.findByText('0x6666…6666')).closest('tr')!
+  expect(within(row).getByText('无法估值')).toBeInTheDocument()
+
+  await userEvent.click(within(row).getByRole('button', { name: '关闭' }))
+  // 弹窗必须说清楚：这不是卖出，代币还在钱包里
+  expect(await screen.findByText(/不会动链上任何东西/)).toBeInTheDocument()
+  expect(screen.getByText(/5 USDG/)).toBeInTheDocument()
+
+  await userEvent.click(screen.getByRole('button', { name: '确认关闭' }))
+  expect(positionsApi.abandon).toHaveBeenCalledWith(9)
+})
+
+// 已核销的仓位 qty 仍非零（代币还在钱包里），必须靠 abandoned 标记归入「已结束」——
+// 漏掉这一条，核销就完全失效。
+it('files an abandoned position under 已结束 even though qty is non-zero', async () => {
+  const done: Position = { ...pos, id: 11, token: '0x7777777777777777777777777777777777777777',
+    symbol: 'GONE', qty: '23951', cost_usdg: '0', realized_usdg: '-5000000',
+    invested_usdg: '5000000', abandoned: true, value_usdg: null, virtual: false }
+  vi.mocked(positionsApi.all).mockResolvedValue([done])
+  renderPage()
+  // 等数据到位：两个档位的条数都出来了才点，否则会点在还是 (0)/(0) 的那一帧上。
+  await userEvent.click(await screen.findByRole('button', { name: '已结束 (1)' }))
+  expect(screen.getByRole('button', { name: '进行中 (0)' })).toBeInTheDocument()
+  const row = (await screen.findByText('0x7777…7777')).closest('tr')!
+  expect(within(row).getByText('已核销')).toBeInTheDocument()
+  expect(within(row).getByText('-100.0%')).toBeInTheDocument()
 })
