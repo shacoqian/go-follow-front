@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
@@ -20,7 +20,8 @@ function cand(o: Partial<FomoCandidate>): FomoCandidate {
   return {
     address: '0x1111111111111111111111111111111111111111', txs: 20, signals: 20, buys: 9, sells: 13,
     tokens: 6, bought_usdg: '0', sold_usdg: '0', realized_usdg: '0', cost_out_usdg: '0',
-    open_cost_usdg: '0', realized_usdg_f: 32.89, roi_closed: 1.9, roi_gross: 1.0,
+    open_cost_usdg: '0', open_value_usdg: '0', unpriced_open_cost_usdg: '0',
+    realized_usdg_f: 32.89, pnl_usdg_f: 32.89, roi_true: 1.5, roi_closed: 1.9, roi_gross: 1.0,
     hold_min_sec: 854, hold_p50_sec: 1200, reversal_min_sec: -1,
     usdg_leg_share: 1, skipped_leg_share: 0, orphan_share: 0.05, closed_share: 0.94, ...o,
   }
@@ -117,7 +118,7 @@ it('表头带悬停提示，且列说明可展开', async () => {
   mount()
   await screen.findByText(/status = partial/)
   // 悬停提示：roi_closed 这一列必须说清它是「跟单最该看的」
-  expect(screen.getByTitle(/跟单最该看的一列/)).toBeInTheDocument()
+  expect(screen.getByTitle(/榜单按它排序/)).toBeInTheDocument()
   // closed 的提示要点出「小 = ROI 是浮盈撑的」——那是最容易踩的坑
   expect(screen.getByTitle(/小 = ROI 是浮盈撑的/)).toBeInTheDocument()
   await userEvent.click(screen.getByText('这些列是什么意思'))
@@ -133,4 +134,33 @@ it('COLS 覆盖表格实际渲染的每一列（改了列必须同步改说明�
   const ths = container.querySelectorAll('thead th')
   expect(ths.length).toBe(COLS.length)
   for (const c of COLS) expect(screen.getByTitle(c.tip)).toBeInTheDocument()
+})
+
+// 2026-09-15 的排序改版：真实盈亏是新的首要列，roi_closed 降级为对照。
+// 这条钉住「两个口径都必须在场」——只留新的会让人看不出差距，只留旧的就是回到缺陷本身。
+it('shows 真实盈亏 as the ranking column and keeps roi_closed alongside it for contrast', async () => {
+  vi.mocked(adminApi.traderScan).mockResolvedValue(
+    board({ candidates: [cand({ pnl_usdg_f: -1325.88, roi_true: -0.43, roi_closed: 7.03 })] }),
+  )
+  mount()
+  const row = (await screen.findByText('0x1111…1111')).closest('tr')!
+  expect(within(row).getByText('-1325.88')).toBeInTheDocument()
+  expect(within(row).getByText('7.03')).toBeInTheDocument()
+  // 表头两列都在，且真实盈亏排在 roi_closed 前面
+  const heads = COLS.map((c) => c.key)
+  expect(heads).toContain('真实盈亏')
+  expect(heads.indexOf('真实盈亏')).toBeLessThan(heads.indexOf('roi_closed'))
+  // 图例必须写明 roi_closed 不再用于排序，否则看的人还会把它当主指标
+  expect(COLS.find((c) => c.key === 'roi_closed')!.long).toContain('已不再用于排序')
+})
+
+// 未估值（旧 run）的行必须显示「—」，不能显示成 0 —— 0 会被读成「不赚不亏」。
+it('renders an unvalued row as — rather than 0', async () => {
+  vi.mocked(adminApi.traderScan).mockResolvedValue(
+    board({ candidates: [cand({ pnl_usdg_f: null, roi_true: null, open_value_usdg: '-1' })] }),
+  )
+  mount()
+  const row = (await screen.findByText('0x1111…1111')).closest('tr')!
+  expect(within(row).queryByText('0.00')).not.toBeInTheDocument()
+  expect(within(row).getAllByText('—').length).toBeGreaterThanOrEqual(2)
 })

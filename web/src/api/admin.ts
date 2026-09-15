@@ -123,7 +123,15 @@ export interface FomoCandidate {
   realized_usdg: string
   cost_out_usdg: string
   open_cost_usdg: string
+  /** 未平仓头寸按跑批当时报价「全卖能拿回多少」；"-1" = 这一轮没估值（2026-09-15 之前的旧 run）。 */
+  open_value_usdg: string
+  /** 其中报不出价那部分的成本。越大，pnl 越是「退不出来」而不是「跌没了」。 */
+  unpriced_open_cost_usdg: string
   realized_usdg_f: number
+  /** 真实盈亏 = 已实现 + (未平仓现值 − 未平仓成本)，新的默认排序键；null = 未估值。 */
+  pnl_usdg_f: number | null
+  /** 真实盈亏 ÷ 累计买入额；null = 未估值或分母为空。 */
+  roi_true: number | null
   roi_closed: number | null
   roi_gross: number | null
   hold_min_sec: number
@@ -144,7 +152,7 @@ export interface FomoBoard {
 /** FomoQuery 是榜单的查询条件。刻意没有 min_realized —— 见 traderScan 的注释。 */
 export interface FomoQuery {
   run?: number
-  sort?: 'roi_closed' | 'realized'
+  sort?: 'pnl' | 'roi_closed' | 'realized'
   min_hold_sec?: number
   min_closed_share?: number
   max_orphan_share?: number

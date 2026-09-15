@@ -33,9 +33,19 @@ export const COLS: { key: string; tip: string; long: string }[] = [
   { key: '#', tip: '本页序号（受 offset 影响）', long: '本页序号，翻页后会接着数。' },
   { key: '地址', tip: '候选钱包，点开链到区块浏览器', long: '候选钱包。点地址链到区块浏览器，旁边按钮一键复制。' },
   {
+    key: '真实盈亏',
+    tip: '已实现 +（未平仓现值 − 未平仓成本）。榜单按它排序',
+    long: '**这一列决定排名**。已实现盈亏 +（未平仓头寸现在全卖能拿回多少 − 这些头寸的成本）。它是唯一同时看见「卖掉的」和「还攥着的」的数字。2026-09-15 实测：生产上选中的三个目标按旧口径全部排错 —— roi_closed 给了 +1505 的那个，真实是 −1326。报不出价的头寸按现值 0 计入（卖不掉对持有人就是 0），配合 orphan/closed 一起看。',
+  },
+  {
+    key: 'roi_true',
+    tip: '真实盈亏 ÷ 累计买入额。跨规模比较用这个',
+    long: '真实盈亏 ÷ 累计买入额。跟单下单用的是你自己的本金，所以能被复制的是**比例**；这一列与「真实盈亏」是同一件事的绝对值与相对值两面。',
+  },
+  {
     key: 'roi_closed',
-    tip: '收益率 = 已实现盈亏 ÷ 已结转成本。跟单最该看的一列',
-    long: '收益率 = 已实现盈亏 ÷ 已结转成本。2.34 表示已平掉的那部分赚了 2.34 倍。跟单下单用的是你自己的本金（固定 5 USDG 或按比例），所以能被复制的是**比例**而不是金额 —— 这是最重要的一列。',
+    tip: '旧口径：已实现 ÷ 已结转成本。只看卖掉的部分，会被「亏的一直拿着」刷高',
+    long: '**旧口径，已不再用于排序**。已实现盈亏 ÷ 已结转成本 —— 只看已经卖掉的那部分，完全看不见手里还攥着什么。一个钱包「赚的卖掉、亏的一直拿着」就能把它刷满分，而在一条绝大多数新币归零的链上，那恰恰是亏钱交易者的默认行为。留着这一列是为了对照：它和「真实盈亏」差得越远，这个钱包越可疑。',
   },
   {
     key: 'realized',
@@ -74,7 +84,7 @@ export const COLS: { key: string; tip: string; long: string }[] = [
 
 type Form = {
   run: string
-  sort: '' | 'realized'
+  sort: '' | 'realized' | 'roi_closed'
   min_hold_sec: string
   min_closed_share: string
   max_orphan_share: string
@@ -126,6 +136,15 @@ function dash(v: number | null, render: (n: number) => string): string {
 const secs = (v: number) => dash(v, (n) => `${n}s`)
 const share = (v: number) => dash(v, (n) => n.toFixed(2))
 const roi = (v: number | null) => (v === null ? '—' : v.toFixed(2))
+
+/**
+ * signed 渲染**可以合法为负**的数值（真实盈亏）。
+ *
+ * 绝不能改用 dash：dash 把任何负数当成「无法计算」的 -1 哨兵，而亏钱的钱包 pnl 本来就是负的，
+ * 用 dash 会把它们全部显示成「—」—— 恰好抹掉这次改版要暴露的那一半。
+ * 这里只有 null（未估值）才是「算不出来」。
+ */
+const signed = (v: number | null) => (v === null ? '—' : v.toFixed(2))
 
 function RunBar({ run }: { run: FomoRun }) {
   const hours = ((run.to_block - run.from_block) * BLOCK_SECONDS) / 3600
@@ -182,7 +201,9 @@ function Row({ c, idx }: { c: FomoCandidate; idx: number }) {
           <CopyButton text={c.address} />
         </span>
       </Td>
-      <Td className="font-medium">{roi(c.roi_closed)}</Td>
+      <Td className="font-medium">{signed(c.pnl_usdg_f)}</Td>
+      <Td>{roi(c.roi_true)}</Td>
+      <Td className="text-slate-400">{roi(c.roi_closed)}</Td>
       <Td className={c.realized_usdg_f > 0 ? 'text-emerald-700' : c.realized_usdg_f < 0 ? 'text-rose-700' : ''}>
         {c.realized_usdg_f.toFixed(2)}
       </Td>
