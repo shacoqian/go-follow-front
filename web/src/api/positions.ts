@@ -27,6 +27,9 @@ export interface SellResult {
 }
 
 export const positionsApi = {
+  // all 是仓位总览页的数据源：跨任务列出当前用户的全部仓位，含已清仓（qty=0）的行。
+  // 页面据 qty 分「进行中 / 已结束」两档，所以后端刻意不过滤已清仓的行。
+  all: () => request<Position[]>('GET', '/positions', undefined),
   byTask: (taskId: number) => request<Position[]>('GET', `/tasks/${taskId}/positions`, undefined),
   sell: (id: number, pctBps: number) =>
     request<SellResult>('POST', `/positions/${id}/sell`, { pct_bps: pctBps }, { timeoutMs: 90_000 }),

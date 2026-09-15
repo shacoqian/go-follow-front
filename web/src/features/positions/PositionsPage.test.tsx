@@ -6,7 +6,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 vi.mock('@/api/tasks', () => ({ tasksApi: { list: vi.fn() } }))
 vi.mock('@/api/targets', () => ({ targetsApi: { list: vi.fn() } }))
 vi.mock('@/api/wallets', () => ({ walletsApi: { list: vi.fn() } }))
-vi.mock('@/api/positions', () => ({ positionsApi: { byTask: vi.fn(), sell: vi.fn() } }))
+vi.mock('@/api/positions', () => ({ positionsApi: { all: vi.fn(), byTask: vi.fn(), sell: vi.fn() } }))
 vi.mock('@/api/decisions', () => ({ decisionsApi: { list: vi.fn() } }))
 vi.mock('@/api/health', () => ({ healthApi: { get: vi.fn() } }))
 
@@ -37,7 +37,22 @@ const pos: Position = {
   next_exit_at: '2026-09-06T04:34:00Z',
 }
 
-function renderPage(path = '/positions?task=10') {
+// closedPos 是另一个任务下已清仓的仓位：qty=0、带已实现盈亏，用于「已结束」那一档。
+const closedPos: Position = {
+  ...pos,
+  id: 8,
+  task_id: 11,
+  token: '0x5555555555555555555555555555555555555555',
+  qty: '0',
+  cost_usdg: '0',
+  realized_usdg: '1396100',
+  virtual: false,
+  exit_fail_count: 0,
+  last_exit_error: '',
+  next_exit_at: null,
+}
+
+function renderPage(path = '/positions') {
   return render(
     <QueryClientProvider client={makeQueryClient()}>
       <MemoryRouter initialEntries={[path]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -49,7 +64,10 @@ function renderPage(path = '/positions?task=10') {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(tasksApi.list).mockResolvedValue([{ id: 10, wallet_id: 1, target_id: 2 } as never])
+  vi.mocked(tasksApi.list).mockResolvedValue([
+    { id: 10, wallet_id: 1, target_id: 2 } as never,
+    { id: 11, wallet_id: 1, target_id: 2 } as never,
+  ])
   vi.mocked(targetsApi.list).mockResolvedValue([
     { id: 2, address: '0x2222222222222222222222222222222222222222', label: '大户A', note: '', created_at: '' },
   ])
@@ -67,26 +85,55 @@ beforeEach(() => {
       created_at: '',
     },
   ])
-  vi.mocked(positionsApi.byTask).mockResolvedValue([pos])
+  vi.mocked(positionsApi.all).mockResolvedValue([pos, closedPos])
   vi.mocked(decisionsApi.list).mockResolvedValue([])
   vi.mocked(healthApi.get).mockResolvedValue({ dry_run: true, kill_switch: false, engine_last_block: 1, node_block: 1 })
 })
 
-it('preselects the task from the query string and lists positions with badges and blocked text', async () => {
+it('lists every position without asking to pick a task, and shows which task each belongs to', async () => {
   renderPage()
-  expect(await screen.findByLabelText('任务')).toHaveValue('10')
   const row = (await screen.findByText('0x3333…3333')).closest('tr')!
   expect(within(row).getByText('dry-run')).toBeInTheDocument()
   expect(within(row).getByText('10')).toBeInTheDocument() // cost 10 USDG
   expect(within(row).getByText(/退出受阻：reserve_short，连续 2 次/)).toBeInTheDocument()
+  // 跨任务列仓位，行里必须能看出这笔属于谁。
+  expect(within(row).getByText('大户A · 主钱包')).toBeInTheDocument()
+  // 页面不再有任务下拉，也不再要求先选。
+  expect(screen.queryByLabelText('任务')).not.toBeInTheDocument()
+  expect(screen.queryByText('请选择任务')).not.toBeInTheDocument()
 })
 
-it('ignores a non-numeric task query param and shows no selection', async () => {
+it('splits 进行中 / 已结束 by qty and defaults to 进行中', async () => {
+  renderPage()
+  await screen.findByText('0x3333…3333')
+  expect(screen.getByRole('button', { name: '进行中 (1)' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '已结束 (1)' })).toBeInTheDocument()
+  // 默认只看进行中：已清仓那条不在
+  expect(screen.queryByText('0x5555…5555')).not.toBeInTheDocument()
+
+  await userEvent.click(screen.getByRole('button', { name: '已结束 (1)' }))
+  const done = (await screen.findByText('0x5555…5555')).closest('tr')!
+  expect(within(done).getByText('1.3961')).toBeInTheDocument() // 已实现盈亏必须看得到
+  expect(screen.queryByText('0x3333…3333')).not.toBeInTheDocument()
+})
+
+it('honors ?task= as a filter and can clear it back to all', async () => {
+  renderPage('/positions?task=11')
+  await userEvent.click(await screen.findByRole('button', { name: '已结束 (1)' }))
+  expect(await screen.findByText('0x5555…5555')).toBeInTheDocument()
+  // 任务 10 的那条被过滤掉了：进行中这一档是空的
+  await userEvent.click(screen.getByRole('button', { name: '进行中 (0)' }))
+  expect(await screen.findByText('没有进行中的仓位')).toBeInTheDocument()
+
+  await userEvent.click(screen.getByRole('button', { name: '显示全部' }))
+  expect(await screen.findByText('0x3333…3333')).toBeInTheDocument()
+})
+
+it('ignores a non-numeric task query param and shows everything', async () => {
   renderPage('/positions?task=abc')
-  expect(await screen.findByLabelText('任务')).toHaveValue('')
-  expect(screen.getAllByText('请选择任务').length).toBeGreaterThan(0)
+  expect(await screen.findByText('0x3333…3333')).toBeInTheDocument()
   expect(screen.queryByText('#NaN')).not.toBeInTheDocument()
-  expect(positionsApi.byTask).not.toHaveBeenCalled()
+  expect(screen.queryByText(/只看任务/)).not.toBeInTheDocument()
 })
 
 it('sells a percentage and shows the result; errors render inline', async () => {

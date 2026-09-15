@@ -11,7 +11,16 @@ import { fmtPrice, shortAddress } from '@/lib/format'
 import { addressUrl } from '@/lib/explorer'
 import { exitBlockedText, positionInFlight, dryRunLeftover } from './exitState'
 
-export function PositionRow({ position: p, onSell }: { position: Position; onSell(): void }) {
+export function PositionRow({
+  position: p,
+  taskLabel,
+  onSell,
+}: {
+  position: Position
+  // taskLabel 由页面算好传进来：总览页跨任务列仓位，行里必须能看出这笔属于谁。
+  taskLabel: string
+  onSell(): void
+}) {
   const url = addressUrl(p.token)
   const blocked = exitBlockedText(p)
 
@@ -29,6 +38,9 @@ export function PositionRow({ position: p, onSell }: { position: Position; onSel
 
   return (
     <Tr>
+      <Td>
+        <span className="whitespace-nowrap">{taskLabel}</span>
+      </Td>
       <Td>
         {url ? (
           <a className="font-mono underline" href={url} target="_blank" rel="noreferrer">
