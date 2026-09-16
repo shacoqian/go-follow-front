@@ -252,3 +252,37 @@ it('files an abandoned position under 已结束 even though qty is non-zero', as
   expect(within(row).getByText('已核销')).toBeInTheDocument()
   expect(within(row).getByText('-100.0%')).toBeInTheDocument()
 })
+
+// 「已实现」单列一格：没有它，「投入」（终身累计）与「当前价值」（只算当前这一轮）
+// 并排摆着会被当成可以相减。这条用的是线上真实数据：WRESTLER 投入 15（买过三次）、
+// 中间全卖过一次落袋 −1.7405、当前这一轮成本 5 现值 4.84 —— 真实盈亏 −12.7%，
+// 而不是 (4.84−15)/15 = −68%。
+it('shows 已实现 so 投入 and 当前价值 are not read as subtractable', async () => {
+  const reopened: Position = { ...pos, id: 21, token: '0xab528169dcc80d68837a33b1e2b866bb7d7ee301',
+    symbol: 'WRESTLER', qty: '5135061136124710748160', cost_usdg: '5000000',
+    realized_usdg: '-1740500', invested_usdg: '15000000', value_usdg: '4841770', virtual: false }
+  vi.mocked(positionsApi.all).mockResolvedValue([reopened])
+  renderPage()
+  const row = (await screen.findByText('0xab52…e301')).closest('tr')!
+  expect(within(row).getByText('15')).toBeInTheDocument()       // 投入（终身）
+  expect(within(row).getByText('-1.7405')).toBeInTheDocument()  // 已实现 —— 关键的那一格
+  expect(within(row).getByText('4.84177')).toBeInTheDocument()  // 当前价值（本轮）
+  expect(within(row).getByText('-12.7%')).toBeInTheDocument()   // 不是 −68%
+  expect(within(row).queryByText('-67.7%')).not.toBeInTheDocument()
+})
+
+// 这一轮还没卖过任何东西时，已实现显示「—」而不是 0.00：
+// 「没卖过」与「卖了但刚好不赚不亏」是两回事，后者极其罕见而前者是常态。
+it('renders untouched realized as — rather than 0.00', async () => {
+  vi.mocked(positionsApi.all).mockResolvedValue([cand0()])
+  renderPage()
+  const row = (await screen.findByText('0x3333…3333')).closest('tr')!
+  // 渲染出来带正号前缀，所以要查 '+0.0000' 而不是 '0.0000' —— 查后者永远匹配不上，
+  // 那样这条断言就废了（变异验证时正是这么漏掉的）。
+  expect(within(row).queryByText('+0.0000')).not.toBeInTheDocument()
+  expect(within(row).getAllByText('—').length).toBeGreaterThanOrEqual(1)
+})
+
+function cand0(): Position {
+  return { ...pos, realized_usdg: '0', invested_usdg: '10000000', cost_usdg: '10000000', value_usdg: '7000000' }
+}

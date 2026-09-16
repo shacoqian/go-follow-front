@@ -45,6 +45,12 @@ export function PositionRow({
   // 两者对用户的含义完全不同。已清仓/已核销没有持仓，市值本来就是空的。
   const valueText = !holding ? '—' : p.value_usdg === null ? '无法估值' : unitsToUsdg(p.value_usdg)
   const pnlText = pnl.pct === null ? '—' : `${pnl.pct >= 0 ? '+' : ''}${(pnl.pct * 100).toFixed(1)}%`
+  // 已实现为 0 时显示「—」而不是 0.00：这一轮还没卖过任何东西，与「卖了但刚好不赚不亏」
+  // 是两回事，后者极其罕见而前者是常态。
+  const realizedNum = Number(p.realized_usdg) / 1e6
+  const realizedText = realizedNum === 0 ? '—' : `${realizedNum >= 0 ? '+' : ''}${realizedNum.toFixed(4)}`
+  const realizedClass =
+    realizedNum === 0 ? 'text-slate-400' : realizedNum > 0 ? 'text-emerald-600' : 'text-red-600' 
   const pnlClass = pnl.pct === null ? 'text-slate-400' : pnl.pct >= 0 ? 'text-emerald-600' : 'text-red-600'
   // 「关闭」只给卖不掉的活仓位：能估出价就该走卖出，别用核销把还能换钱的仓位一笔勾销。
   const canAbandon = holding && p.value_usdg === null
@@ -70,6 +76,12 @@ export function PositionRow({
       {/* 代币精度未知，数量原样显示为原始整数字符串。 */}
       <Td>{p.qty}</Td>
       <Td>{unitsToUsdg(p.invested_usdg)}</Td>
+      {/* 已实现单列一格：没有它，「投入」（终身累计）与「当前价值」（只算当前这一轮）
+          并排摆着会被当成可以相减 —— 实测有人把「投入 15 / 现值 4.84」读成亏 68%，
+          而真实是 −12.7%（那 15 里有 10 已经卖掉换回 8.26 了，差额记在这一列）。 */}
+      <Td>
+        <span className={realizedClass}>{realizedText}</span>
+      </Td>
       <Td>{valueText}</Td>
       <Td>
         <span className={pnlClass}>{pnlText}</span>

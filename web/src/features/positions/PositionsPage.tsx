@@ -112,7 +112,7 @@ export default function PositionsPage() {
         ) : shown.length === 0 ? (
           <p className="text-sm text-slate-500">{tab === 'open' ? '没有进行中的仓位' : '没有已结束的仓位'}</p>
         ) : (
-          <Table head={['任务', '代币', '数量', '投入 USDG', '当前价值', '盈亏', '均价', '加仓', '状态', '操作']}>
+          <Table head={['任务', '代币', '数量', '投入 USDG', '已实现', '当前价值', '盈亏', '均价', '加仓', '状态', '操作']}>
             {shown.map((p) => (
               <PositionRow
                 key={p.id}
