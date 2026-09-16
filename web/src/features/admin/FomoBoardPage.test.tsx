@@ -23,7 +23,8 @@ function cand(o: Partial<FomoCandidate>): FomoCandidate {
     open_cost_usdg: '0', open_value_usdg: '0', unpriced_open_cost_usdg: '0',
     realized_usdg_f: 32.89, pnl_usdg_f: 32.89, roi_true: 1.5, roi_closed: 1.9, roi_gross: 1.0,
     hold_min_sec: 854, hold_p50_sec: 1200, reversal_min_sec: -1,
-    usdg_leg_share: 1, skipped_leg_share: 0, orphan_share: 0.05, closed_share: 0.94, ...o,
+    usdg_leg_share: 1, skipped_leg_share: 0, orphan_share: 0.05, closed_share: 0.94,
+    score_log_ret: 0.18, score_log_ret_closed: 0.12, scored_tokens: 15, ...o,
   }
 }
 function board(o: Partial<FomoBoard> = {}): FomoBoard {
@@ -163,4 +164,64 @@ it('renders an unvalued row as — rather than 0', async () => {
   const row = (await screen.findByText('0x1111…1111')).closest('tr')!
   expect(within(row).queryByText('0.00')).not.toBeInTheDocument()
   expect(within(row).getAllByText('—').length).toBeGreaterThanOrEqual(2)
+})
+
+/** 行内取第 n 个单元格。列序：#(0) 地址(1) 池内分(2) 落袋分(3) 币数(4) 真实盈亏(5)… */
+function cellsOf(addrText: string) {
+  const row = screen.getByText(addrText).closest('tr')!
+  return within(row).getAllByRole('cell')
+}
+
+it('池内分是第一个数据列，币数不足 8 时标黄提醒', async () => {
+  vi.mocked(adminApi.traderScan).mockResolvedValue(
+    board({
+      candidates: [
+        cand({ address: '0x' + 'a'.repeat(40), score_log_ret: 0.18, score_log_ret_closed: 0.12, scored_tokens: 15 }),
+        cand({ address: '0x' + 'b'.repeat(40), score_log_ret: 2.3, score_log_ret_closed: 2.3, scored_tokens: 1 }),
+      ],
+    }),
+  )
+  mount()
+  await screen.findByText('0xaaaa…aaaa')
+  const first = cellsOf('0xaaaa…aaaa')
+  expect(first[2]).toHaveTextContent('0.18')
+  expect(first[3]).toHaveTextContent('0.12')
+  expect(first[4]).toHaveTextContent('15')
+  expect(first[4].className).not.toMatch(/amber/)
+  // 只有 1 个币 —— 分数最高但不可信，必须标黄
+  const second = cellsOf('0xbbbb…bbbb')
+  expect(second[2]).toHaveTextContent('2.30')
+  expect(second[4]).toHaveTextContent('1')
+  expect(second[4].className).toMatch(/amber/)
+})
+
+it('落袋分与池内分差得大时标黄：那个名次靠的是没卖掉的浮盈', async () => {
+  vi.mocked(adminApi.traderScan).mockResolvedValue(
+    board({
+      candidates: [
+        // 差 0.46：账面 +4.7% vs 落袋 −1.3%，正是实测那个形态
+        cand({ address: '0x' + 'c'.repeat(40), score_log_ret: 0.42, score_log_ret_closed: -0.04, scored_tokens: 12 }),
+        // 差 0.06：在阈值内，不标
+        cand({ address: '0x' + 'd'.repeat(40), score_log_ret: 0.18, score_log_ret_closed: 0.12, scored_tokens: 12 }),
+      ],
+    }),
+  )
+  mount()
+  await screen.findByText('0xcccc…cccc')
+  expect(cellsOf('0xcccc…cccc')[3].className).toMatch(/amber/)
+  expect(cellsOf('0xdddd…dddd')[3].className).not.toMatch(/amber/)
+})
+
+it('没算过分的旧 run 显示「—」而不是 0', async () => {
+  vi.mocked(adminApi.traderScan).mockResolvedValue(
+    board({ candidates: [cand({ score_log_ret: null, score_log_ret_closed: null, scored_tokens: 0 })] }),
+  )
+  mount()
+  await screen.findByText('0x1111…1111')
+  const cells = cellsOf('0x1111…1111')
+  expect(cells[2]).toHaveTextContent('—')
+  expect(cells[3]).toHaveTextContent('—')
+  expect(cells[4]).toHaveTextContent('—')
+  // 未算分不是「差得大」，不该标黄
+  expect(cells[3].className).not.toMatch(/amber/)
 })

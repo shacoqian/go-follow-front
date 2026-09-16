@@ -33,9 +33,24 @@ export const COLS: { key: string; tip: string; long: string }[] = [
   { key: '#', tip: '本页序号（受 offset 影响）', long: '本页序号，翻页后会接着数。' },
   { key: '地址', tip: '候选钱包，点开链到区块浏览器', long: '候选钱包。点地址链到区块浏览器，旁边按钮一键复制。' },
   {
+    key: '池内分',
+    tip: '按币种分别算收益率、取对数等权平均。榜单按它排序。配「币数」一起看',
+    long: '**这一列决定排名**（2026-09-16 起）。对每个持有过的币分别算 (所得 + 未平仓估值) ÷ 投入，取对数后**等权平均**。关键是按币种配对 —— 在同一个币里比这个人的所得和他自己的投入，币种本身的涨跌就被完全消掉了，剩下的才是操作水平。0 = 打平，+0.18 ≈ 每个币平均赚 20%，−0.30 ≈ 平均亏 26%。为什么换掉「真实盈亏」：实测盈亏 ≈ 交易量 × 均值为负的随机数，按盈亏排名本质上是按交易量排名 —— 跨期持续性只有 +0.182（噪声阈值 0.207），而同一批地址的交易量持续性是 +0.743。新口径 3 天窗口样本外 +0.626。',
+  },
+  {
+    key: '落袋分',
+    tip: '同「池内分」但未平仓一律按 0。与池内分差得越大，名次越依赖卖不掉的浮盈',
+    long: '和「池内分」同一个算法，唯一区别是未平仓头寸**一律按 0** 估值。两列并排是有意的：差得越大，这个名次越依赖还没卖掉的账面价值。实测 top20% 那 +4.7% 全部来自那 6% 没卖掉的部分 —— 只看落袋是 −1.3%。而实盘撞过「估得出价但无路由」，所以这个差必须看得见。',
+  },
+  {
+    key: '币数',
+    tip: '参与「池内分」平均的币种数。少于 8 的分数不可信',
+    long: '参与分数平均的币种数（只算真正投过钱的）。**分数必须配它一起看**：等权平均下，只交易过 1 个币的地址靠一次运气就能拿满分。实测跨期持续性随门槛单调变好 —— ≥3 个币 +0.428，≥5 +0.560，≥8 +0.626。低于 8 的行当参考，不当依据。',
+  },
+  {
     key: '真实盈亏',
-    tip: '已实现 +（未平仓现值 − 未平仓成本）。榜单按它排序',
-    long: '**这一列决定排名**。已实现盈亏 +（未平仓头寸现在全卖能拿回多少 − 这些头寸的成本）。它是唯一同时看见「卖掉的」和「还攥着的」的数字。2026-09-15 实测：生产上选中的三个目标按旧口径全部排错 —— roi_closed 给了 +1505 的那个，真实是 −1326。报不出价的头寸按现值 0 计入（卖不掉对持有人就是 0），配合 orphan/closed 一起看。',
+    tip: '已实现 +（未平仓现值 − 未平仓成本）。2026-09-16 起不再用于排序',
+    long: '**旧排序键（2026-09-15 至 09-16）**。已实现盈亏 +（未平仓头寸现在全卖能拿回多少 − 这些头寸的成本）。它是唯一同时看见「卖掉的」和「还攥着的」的数字。2026-09-15 实测：生产上选中的三个目标按旧口径全部排错 —— roi_closed 给了 +1505 的那个，真实是 −1326。报不出价的头寸按现值 0 计入（卖不掉对持有人就是 0），配合 orphan/closed 一起看。',
   },
   {
     key: 'roi_true',
@@ -146,6 +161,16 @@ const roi = (v: number | null) => (v === null ? '—' : v.toFixed(2))
  */
 const signed = (v: number | null) => (v === null ? '—' : v.toFixed(2))
 
+/**
+ * scoreGap 判断「这个名次是不是主要靠没卖掉的浮盈撑着」。
+ *
+ * 阈值 0.1 ≈ 两个口径差 10% 的收益率。超过就把落袋分标黄 —— 实测 top20% 的 +4.7%
+ * 全部来自 6% 未卖出头寸，只看落袋是 −1.3%，而那部分未必真卖得掉（实盘撞过无路由）。
+ * 任一为 null 时返回 false：没算过分不是「差得大」。
+ */
+const scoreGap = (c: FomoCandidate) =>
+  c.score_log_ret !== null && c.score_log_ret_closed !== null && c.score_log_ret - c.score_log_ret_closed > 0.1
+
 function RunBar({ run }: { run: FomoRun }) {
   const hours = ((run.to_block - run.from_block) * BLOCK_SECONDS) / 3600
   return (
@@ -201,7 +226,12 @@ function Row({ c, idx }: { c: FomoCandidate; idx: number }) {
           <CopyButton text={c.address} />
         </span>
       </Td>
-      <Td className="font-medium">{signed(c.pnl_usdg_f)}</Td>
+      <Td className="font-medium">{signed(c.score_log_ret)}</Td>
+      <Td className={scoreGap(c) ? 'text-amber-700' : 'text-slate-400'}>{signed(c.score_log_ret_closed)}</Td>
+      <Td className={c.scored_tokens > 0 && c.scored_tokens < 8 ? 'text-amber-700' : ''}>
+        {c.scored_tokens || '—'}
+      </Td>
+      <Td>{signed(c.pnl_usdg_f)}</Td>
       <Td>{roi(c.roi_true)}</Td>
       <Td className="text-slate-400">{roi(c.roi_closed)}</Td>
       <Td className={c.realized_usdg_f > 0 ? 'text-emerald-700' : c.realized_usdg_f < 0 ? 'text-rose-700' : ''}>

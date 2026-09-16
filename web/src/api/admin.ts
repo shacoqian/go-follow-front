@@ -141,6 +141,15 @@ export interface FomoCandidate {
   skipped_leg_share: number
   orphan_share: number
   closed_share: number
+  /**
+   * 池内收益分数（2026-09-16 起的默认排序键）：按币种分别算收益率、取对数后等权平均。
+   * null = 这一轮没算分（旧 run）或没有合格币种。必须配 min_scored_tokens 看。
+   */
+  score_log_ret: number | null
+  /** 同上但未平仓一律按 0 估值。与 score_log_ret 差得越大，名次越依赖卖不掉的账面浮盈。 */
+  score_log_ret_closed: number | null
+  /** 参与平均的币种数。旧 run 为 0。 */
+  scored_tokens: number
 }
 
 export interface FomoBoard {
@@ -152,8 +161,10 @@ export interface FomoBoard {
 /** FomoQuery 是榜单的查询条件。刻意没有 min_realized —— 见 traderScan 的注释。 */
 export interface FomoQuery {
   run?: number
-  sort?: 'pnl' | 'roi_closed' | 'realized'
+  sort?: 'score' | 'pnl' | 'roi_closed' | 'realized'
   min_hold_sec?: number
+  /** Sort=score 的必要搭配：只交易过 1-2 个币的地址靠一次运气就能拿高分。建议 8。 */
+  min_scored_tokens?: number
   min_closed_share?: number
   max_orphan_share?: number
   min_usdg_leg_share?: number
@@ -203,6 +214,7 @@ export const adminApi = {
         run: p.run,
         sort: p.sort,
         min_hold_sec: p.min_hold_sec,
+        min_scored_tokens: p.min_scored_tokens,
         min_closed_share: p.min_closed_share,
         max_orphan_share: p.max_orphan_share,
         min_usdg_leg_share: p.min_usdg_leg_share,
